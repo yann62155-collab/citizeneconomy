@@ -37,7 +37,7 @@ public final class Config {
         WEB_BIND = b.comment("Adresse d'écoute (0.0.0.0 = toutes les interfaces).").define("bindAddress", "0.0.0.0");
         WEB_COUNCIL_PASSWORD = b.comment("Mot de passe du Conseil royal (patron de toutes les entreprises). CHANGEZ-LE : la valeur par défaut est connue. Vide = accès Conseil désactivé.")
                 .define("councilPassword", "2007");
-        WEB_PUBLIC_URL = b.comment("Adresse affichée aux joueurs par /ceconomy web.").define("publicUrl", "http://citizen.boxtoplay.com:30039");
+        WEB_PUBLIC_URL = b.comment("Adresse affichée aux joueurs par /ceconomy web.").define("publicUrl", "http://mc312.boxtoplay.com:30039");
         b.pop();
         SPEC = b.build();
     }

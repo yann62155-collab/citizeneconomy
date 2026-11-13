@@ -56,7 +56,7 @@ public final class EconomyRuntime {
     public fr.citizen.economy.web.WebPanel web() { return web; }
 
     public static String webUrl() {
-        try { return Config.WEB_PUBLIC_URL.get(); } catch (IllegalStateException e) { return "http://citizen.boxtoplay.com:30039"; }
+        try { return Config.WEB_PUBLIC_URL.get(); } catch (IllegalStateException e) { return "http://mc312.boxtoplay.com:30039"; }
     }
 
     public static EconomyRuntime current() { return current; }
