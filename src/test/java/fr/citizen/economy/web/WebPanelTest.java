@@ -114,6 +114,9 @@ class WebPanelTest {
         // le Conseil peut aussi fixer le salaire du proprietaire et publier une annonce
         String own = ui(tok, "emp.salary", "{\"id\":\"" + forge + "\",\"p\":\"" + alice.id() + "\",\"f_salary\":\"20\",\"_v\":\"employees\"}");
         assertTrue(own.contains("\"kind\":\"ok\""), own);
+        // et le bouton "Salaire" est bien propose sur la ligne du patron
+        String emp = ui(tok, "open", "{\"to\":\"employees\",\"id\":\"" + forge + "\"}");
+        assertTrue(emp.split("emp.salary", -1).length - 1 >= 2, emp); // patron + employe recrute
         String ann = ui(tok, "ann.publish", "{\"id\":\"" + taverne + "\",\"vis\":\"INTERNAL\",\"f_title\":\"Reunion\",\"f_body\":\"Reunion du conseil demain\",\"f_cat\":\"Information\",\"_v\":\"cboard\"}");
         assertTrue(ann.contains("\"kind\":\"ok\""), ann);
     }

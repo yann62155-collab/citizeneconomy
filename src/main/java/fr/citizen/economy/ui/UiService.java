@@ -400,7 +400,7 @@ public final class UiService {
             if (can(a, me, Permission.MANAGE_PERMISSIONS) && m.role() != CompanyRole.OWNER) top.add(ViewBuilder.nav("Droits", "perms", "id", ids, "p", pid));
             b.line(m.name() + " — " + m.grade() + " (" + roleFr(m.role()) + ")" + (canSee ? " — " + money(m.salary()) : ""), m.role() == CompanyRole.OWNER ? "g" : "n", top.toArray(new Btn[0]));
             boolean ownRow = me != null && me.role() == CompanyRole.OWNER && m.player().equals(a.id()); // le patron règle son propre salaire
-            boolean manageable = a.admin() || ownRow || (me != null && m.role() != CompanyRole.OWNER && !m.player().equals(a.id())
+            boolean manageable = a.admin() || a.isCouncil() || ownRow || (me != null && m.role() != CompanyRole.OWNER && !m.player().equals(a.id())
                     && (me.role() == CompanyRole.OWNER || (me.role() == CompanyRole.MANAGER && m.role() == CompanyRole.EMPLOYEE)));
             if (manageable) {
                 List<Btn> acts = new ArrayList<>();
