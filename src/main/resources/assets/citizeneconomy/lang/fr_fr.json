@@ -1,0 +1,9 @@
+{
+  "item.citizeneconomy.coin_bronze": "Pièce de bronze (1 PO)",
+  "item.citizeneconomy.coin_silver": "Pièce d'argent (10 PO)",
+  "item.citizeneconomy.coin_gold": "Pièce d'or (100 PO)",
+  "item.citizeneconomy.coin_platinum": "Pièce de platine (1000 PO)",
+  "itemGroup.citizeneconomy": "Citizen Economy",
+  "key.citizeneconomy.open": "Ouvrir le menu économique",
+  "key.categories.citizeneconomy": "Citizen Economy"
+}

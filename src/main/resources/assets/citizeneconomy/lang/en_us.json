@@ -1,0 +1,9 @@
+{
+  "item.citizeneconomy.coin_bronze": "Bronze Coin (1 PO)",
+  "item.citizeneconomy.coin_silver": "Silver Coin (10 PO)",
+  "item.citizeneconomy.coin_gold": "Gold Coin (100 PO)",
+  "item.citizeneconomy.coin_platinum": "Platinum Coin (1000 PO)",
+  "itemGroup.citizeneconomy": "Citizen Economy",
+  "key.citizeneconomy.open": "Open the economy menu",
+  "key.categories.citizeneconomy": "Citizen Economy"
+}

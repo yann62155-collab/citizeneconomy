@@ -1,0 +1,27 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "All Rights Reserved"
+
+[[mods]]
+modId = "citizeneconomy"
+version = "0.1.0"
+displayName = "Citizen Economy"
+logoFile = "logo.png"
+authors = "Citizen"
+description = '''
+Systeme economique RP complet pour le serveur Citizen : entreprises, banque, taxes, factures, annonces.
+'''
+
+[[dependencies.citizeneconomy]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1.215]"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.citizeneconomy]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1]"
+ordering = "NONE"
+side = "BOTH"

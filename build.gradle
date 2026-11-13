@@ -1,0 +1,56 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.78' // A VERIFIER au premier build
+}
+
+version = mod_version
+group = mod_group_id
+base { archivesName = mod_id }
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+configurations {
+    bundledLib
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    // Resout exactement net.neoforged:neoforge:21.1.215
+    version = project.neo_version
+
+    runs {
+        client { client() }
+        server { server(); programArguments.add('--nogui') }
+    }
+    mods {
+        "${mod_id}" { sourceSet sourceSets.main }
+    }
+}
+
+
+dependencies {
+    // Driver SQLite : embarque comme simple ressource (lib/sqlite-jdbc.jar) et charge dans un chargeur isole,
+    // pour ne jamais entrer en conflit avec le package org.sqlite d'un autre mod.
+    bundledLib("org.xerial:sqlite-jdbc:${sqlite_version}") { transitive = false }
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation "org.xerial:sqlite-jdbc:${sqlite_version}"
+}
+
+processResources {
+    from(configurations.bundledLib) {
+        into 'lib'
+        rename { 'sqlite-jdbc.jar' }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8'; options.release = 21 }
+test {
+    useJUnitPlatform()
+    systemProperty 'citizeneconomy.driver', 'classpath'   // les tests utilisent le driver du classpath (aucun fichier verrouille sous Windows)
+    testLogging { events 'failed'; exceptionFormat 'full'; showStandardStreams = false }   // affiche les echecs dans le terminal
+}

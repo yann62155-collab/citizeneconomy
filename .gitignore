@@ -1,0 +1,6 @@
+.gradle/
+build/
+run/
+*.db
+*.db-wal
+*.db-shm

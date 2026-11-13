@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citizen Économie — Panneau des entreprises</title>
+<style>
+:root{--bg:#0d0a0a;--panel:#181212;--gold:#c9a24a;--gold2:#e6c775;--red:#7a1010;--red2:#a32020;--parch:#e8dcc0;--mut:#8f8571;--ok:#6fae5c;--err:#d9534f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--parch);font:16px/1.45 Georgia,'Times New Roman',serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:2px solid var(--gold);background:#120d0d;position:sticky;top:0;z-index:2}
+header h1{margin:0;font-size:20px;color:var(--gold2);letter-spacing:.5px;flex:1}
+header .who{color:var(--mut);font-size:14px}
+main{max-width:880px;margin:18px auto;padding:0 14px 60px}
+.card{background:var(--panel);border:1px solid var(--gold);border-left:5px solid var(--red);border-radius:4px;padding:16px 18px}
+h2{margin:0 0 10px;color:var(--gold2);font-size:22px}
+.line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:5px 0;border-bottom:1px solid #2a2020}
+.line .t{flex:1;min-width:200px;white-space:pre-wrap;word-break:break-word}
+.s-h{color:var(--gold2);font-weight:bold;font-size:18px;margin-top:10px}
+.s-g{color:var(--gold)}.s-r{color:var(--err)}.s-m{color:var(--mut)}
+button{font:inherit;cursor:pointer;color:var(--parch);background:#2a1414;border:1px solid var(--gold);border-radius:3px;padding:6px 14px}
+button:hover{background:var(--red);color:#fff}
+button.sm{padding:3px 10px;font-size:14px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.fields{margin-top:14px;display:grid;gap:10px}
+label{display:block;color:var(--gold);font-size:14px;margin-bottom:3px}
+input{width:100%;font:inherit;color:var(--parch);background:#0d0a0a;border:1px solid #5a4a2a;border-radius:3px;padding:7px 9px}
+input:focus{outline:2px solid var(--gold)}
+.msg{padding:9px 12px;margin-bottom:12px;border-radius:3px;border:1px solid}
+.msg.ok{border-color:var(--ok);color:var(--ok)}.msg.err{border-color:var(--err);color:var(--err)}.msg.info{border-color:var(--gold);color:var(--gold)}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button.on{background:var(--red);border-color:var(--gold2)}
+.hint{color:var(--mut);font-size:14px;margin:8px 0}
+</style>
+</head>
+<body>
+<header><h1>⚜ Citizen Économie</h1><span class="who" id="who"></span><button class="sm" id="out" hidden>Déconnexion</button></header>
+<main id="app"></main>
+<script>
+"use strict";
+const app = document.getElementById('app');
+let current = null;
+
+async function api(path, body) {
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json','X-CE':'1'}, body: JSON.stringify(body||{}), credentials:'same-origin'});
+  let j = {};
+  try { j = await r.json(); } catch (e) {}
+  return {status:r.status, data:j};
+}
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+
+function loginScreen(msg) {
+  document.getElementById('who').textContent = '';
+  document.getElementById('out').hidden = true;
+  app.replaceChildren();
+  const card = el('div', 'card');
+  card.append(el('h2', '', 'Connexion'));
+  if (msg) card.append(el('div', 'msg err', msg));
+  const tabs = el('div', 'tabs');
+  const bOwner = el('button', 'on', 'Patron'), bCouncil = el('button', '', 'Conseil royal');
+  tabs.append(bOwner, bCouncil);
+  const form = el('div');
+  function showOwner() {
+    bOwner.className = 'on'; bCouncil.className = '';
+    form.replaceChildren();
+    form.append(el('div', 'hint', 'En jeu, tapez /ceconomy web : vous recevez un code à 8 chiffres valable 5 minutes. Réservé aux joueurs qui détiennent une entreprise ; vous gérez toutes les entreprises que vous possédez.'));
+    const l = el('label', '', 'Code de connexion'); const i = el('input'); i.inputMode = 'numeric'; i.maxLength = 8; i.autocomplete = 'one-time-code';
+    const go = el('button', '', 'Se connecter');
+    const run = async () => { const r = await api('/api/login', {code: i.value.trim()}); r.status === 200 ? start() : loginScreen(r.data.error || 'Connexion impossible.'); };
+    go.onclick = run; i.onkeydown = e => { if (e.key === 'Enter') run(); };
+    form.append(l, i, el('div', 'bar'), go); i.focus();
+  }
+  function showCouncil() {
+    bOwner.className = ''; bCouncil.className = 'on';
+    form.replaceChildren();
+    form.append(el('div', 'hint', 'Accès du Conseil royal : patron de toutes les entreprises (salaires, finances, annonces, factures...).'));
+    const l = el('label', '', 'Mot de passe'); const i = el('input'); i.type = 'password'; i.autocomplete = 'current-password';
+    const go = el('button', '', 'Entrer');
+    const run = async () => { const r = await api('/api/login', {password: i.value}); r.status === 200 ? start() : loginScreen(r.data.error || 'Connexion impossible.'); };
+    go.onclick = run; i.onkeydown = e => { if (e.key === 'Enter') run(); };
+    form.append(l, i, el('div', 'bar'), go); i.focus();
+  }
+  bOwner.onclick = showOwner; bCouncil.onclick = showCouncil;
+  card.append(tabs, form);
+  app.append(card);
+  showOwner();
+}
+
+async function start() {
+  const s = await api('/api/session');
+  if (s.status !== 200) return loginScreen();
+  document.getElementById('who').textContent = (s.data.council ? '⚜ ' : '') + s.data.name;
+  const out = document.getElementById('out'); out.hidden = false;
+  out.onclick = async () => { await api('/api/logout'); loginScreen(); };
+  send('open', {to: 'companies', _v: 'companies'}, null);
+}
+
+async function send(action, args, view) {
+  const a = Object.assign({}, args);
+  if (view) {
+    document.querySelectorAll('[data-f]').forEach(i => { a[i.dataset.f] = i.value; });
+    a._n = view.nonce; a._v = view.id;
+  }
+  const r = await api('/api/ui', {action, args: a});
+  if (r.status === 401) return loginScreen(r.data.error);
+  if (r.status !== 200 || !r.data.lines) {
+    if (current) { current.message = r.data.error || 'Erreur.'; current.kind = 'err'; render(current); }
+    else loginScreen(r.data.error);
+    return;
+  }
+  current = r.data;
+  render(current);
+  window.scrollTo(0, 0);
+}
+
+function btn(b, view, small) {
+  const e = el('button', small ? 'sm' : '', b.l);
+  e.onclick = () => { if (b.c && !confirm(b.c)) return; send(b.a, b.args, view); };
+  return e;
+}
+
+function render(v) {
+  app.replaceChildren();
+  const card = el('div', 'card');
+  card.append(el('h2', '', v.title));
+  if (v.message) card.append(el('div', 'msg ' + (v.kind || 'info'), v.message));
+  for (const l of v.lines) {
+    const row = el('div', 'line');
+    row.append(el('div', 't s-' + l.s, l.t));
+    for (const b of l.b) row.append(btn(b, v, true));
+    card.append(row);
+  }
+  if (v.fields.length) {
+    const f = el('div', 'fields');
+    for (const x of v.fields) {
+      const w = el('div'); w.append(el('label', '', x.label));
+      const i = el('input'); i.dataset.f = x.id; i.value = x.value; i.maxLength = x.max || 200; w.append(i); f.append(w);
+    }
+    card.append(f);
+  }
+  const bar = el('div', 'bar');
+  for (const b of v.buttons) bar.append(btn(b, v, false));
+  card.append(bar);
+  app.append(card);
+}
+
+start();
+</script>
+</body>
+</html>
