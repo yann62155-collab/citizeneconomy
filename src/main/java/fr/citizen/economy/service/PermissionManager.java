@@ -61,14 +61,14 @@ public final class PermissionManager {
     static Authority authorize(Connection c, Actor actor, long companyId, Permission needed, boolean mutating)
             throws SQLException {
         Company co = Records.company(c, companyId);
-        // Un admin qui est aussi membre de l'entreprise agit en tant que membre (facturer, publier...), sans perdre ses droits d'admin.
-        if (actor.admin()) return new Authority(actor, Records.activeMember(c, companyId, actor.id()).orElse(null), co);
         // Conseil royal : patron de toutes les entreprises (tous les droits, y compris signer au nom de l'entreprise).
         if (actor.isCouncil()) {
             if (mutating && co.status() != CompanyStatus.ACTIVE)
                 throw new EconomyException("COMPANY_NOT_ACTIVE", "L'entreprise n'est pas active.");
             return new Authority(actor, councilMember(companyId), co);
         }
+        // Un admin qui est aussi membre de l'entreprise agit en tant que membre (facturer, publier...), sans perdre ses droits d'admin.
+        if (actor.admin()) return new Authority(actor, Records.activeMember(c, companyId, actor.id()).orElse(null), co);
         Optional<Member> m = Records.activeMember(c, companyId, actor.id());
         if (m.isEmpty()) throw new EconomyException("FORBIDDEN", "Vous ne faites pas partie de cette entreprise.");
         if (mutating && co.status() != CompanyStatus.ACTIVE)

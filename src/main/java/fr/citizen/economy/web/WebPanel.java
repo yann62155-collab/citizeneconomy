@@ -218,10 +218,10 @@ public final class WebPanel {
         Map<String, String> args;
         try { args = ViewCodec.argsFromJson(Json.write(body.getOrDefault("args", Map.of()))); }
         catch (IllegalArgumentException e) { throw new BadRequest("Paramètres invalides."); }
-        if (!WebPolicy.actionAllowed(action)) { json(ex, 403, err("Action non disponible sur le panneau web.")); return; }
+        if (!WebPolicy.actionAllowed(action, s.council())) { json(ex, 403, err("Action non disponible sur le panneau web.")); return; }
         String back = WebPolicy.normalizeView(args.get("_v"));
         String to = WebPolicy.normalizeView(args.get("to"));
-        if (!WebPolicy.viewAllowed(back) || (action.equals("open") && !WebPolicy.viewAllowed(to))) { json(ex, 403, err("Écran non disponible sur le panneau web.")); return; }
+        if (!WebPolicy.viewAllowed(back, s.council()) || (action.equals("open") && !WebPolicy.viewAllowed(to, s.council()))) { json(ex, 403, err("Écran non disponible sur le panneau web.")); return; }
         args.put("_v", back);
         if (action.equals("open")) args.put("to", to);
         CompletableFuture<View> f = CompletableFuture.supplyAsync(() -> ui.handle(s.actor(), action, args), worker);
@@ -229,7 +229,7 @@ public final class WebPanel {
         try { v = f.get(20, TimeUnit.SECONDS); }
         catch (TimeoutException e) { json(ex, 504, err("Le serveur met trop de temps à répondre.")); return; }
         catch (InterruptedException | ExecutionException e) { json(ex, 500, err("Erreur interne.")); return; }
-        send(ex, 200, "application/json; charset=utf-8", ViewCodec.toJson(WebPolicy.filter(v)).getBytes(StandardCharsets.UTF_8), null);
+        send(ex, 200, "application/json; charset=utf-8", ViewCodec.toJson(WebPolicy.filter(v, s.council())).getBytes(StandardCharsets.UTF_8), null);
     }
 
     // ------------------------------------------------------------------ reponses

@@ -351,12 +351,13 @@ public final class UiService {
     }
 
     private ViewBuilder vCompanies(Actor a, Map<String, String> args) {
-        ViewBuilder b = vb("companies", "Mes entreprises", args);
+        ViewBuilder b = vb("companies", a.isCouncil() ? "Entreprises du royaume" : "Mes entreprises", args);
         List<Company> list = a.isCouncil() ? eco.companies.listAll(a).join() : eco.companies.companiesOf(a.id()).join();
         if (list.isEmpty()) b.m("Vous ne faites partie d'aucune entreprise.");
         for (Company c : list) b.line(c.name() + "  (" + c.matricule() + ")  [" + statusFr(c.status().name()) + "]  " + c.sector(), c.status() == CompanyStatus.ACTIVE ? "n" : "r",
                 ViewBuilder.nav("Ouvrir", "company", "id", Long.toString(c.id())));
         b.button(ViewBuilder.nav("Retour", "main")).button(ViewBuilder.nav("Créer une entreprise", "create"));
+        if (a.isCouncil()) b.button(ViewBuilder.nav("Administration", "admin")).button(ViewBuilder.nav("Trésorerie royale", "treasury"));
         return b;
     }
 
@@ -481,7 +482,7 @@ public final class UiService {
             boolean own = an.author().equals(a.id());
             boolean manageAll = can(a, me, Permission.MANAGE_ANNOUNCEMENTS);
             List<Btn> btns = new ArrayList<>();
-            if (!a.admin() && (own || manageAll)) {
+            if ((!a.admin() || a.isCouncil()) && (own || manageAll)) {
                 btns.add(b.act("Modifier", "ann.edit", "a", Long.toString(an.id())));
                 btns.add(ViewBuilder.confirm(b.act("Suppr.", "ann.delete", "a", Long.toString(an.id())), "Supprimer cette annonce ?"));
             }

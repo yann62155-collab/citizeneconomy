@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Ce que le panneau web a le droit de faire : uniquement la gestion des entreprises (jamais l'administration du royaume,
- * ni la banque personnelle, ni les depots/retraits en pieces qui exigent l'inventaire d'un joueur en jeu).
+ * Ce que le panneau web a le droit de faire : la gestion des entreprises pour les patrons ; en plus, toute l'administration du royaume
+ * pour le Conseil royal. Jamais la banque personnelle ni les depots/retraits en pieces (ils exigent l'inventaire d'un joueur en jeu).
  */
 public final class WebPolicy {
     private WebPolicy() { }
@@ -26,9 +26,16 @@ public final class WebPolicy {
             "inv.create", "inv.pay", "inv.refuse", "inv.cancel",
             "tax.pay");
 
-    public static boolean actionAllowed(String action) { return ACTIONS.contains(action); }
+    /** Ecrans d'administration du royaume, reserves au Conseil royal. */
+    static boolean adminView(String v) { return v.equals("admin") || v.equals("treasury") || v.startsWith("adm_"); }
 
-    public static boolean viewAllowed(String view) { return VIEWS.contains(view); }
+    public static boolean actionAllowed(String action, boolean council) {
+        return ACTIONS.contains(action) || (council && action.startsWith("adm."));
+    }
+
+    public static boolean viewAllowed(String view, boolean council) {
+        return VIEWS.contains(view) || (council && adminView(view));
+    }
 
     /** L'ecran de retour par defaut ("main") devient la liste des entreprises. */
     public static String normalizeView(String view) {
@@ -36,19 +43,19 @@ public final class WebPolicy {
     }
 
     /** Retire de l'ecran tout bouton que le panneau web n'a pas le droit d'utiliser. */
-    public static View filter(View v) {
+    public static View filter(View v, boolean council) {
         List<View.Line> lines = new ArrayList<>();
-        for (View.Line l : v.lines()) lines.add(new View.Line(l.text(), l.style(), keep(l.btns())));
-        return new View(v.id(), v.title(), v.nonce(), v.message(), v.kind(), lines, v.fields(), keep(v.buttons()));
+        for (View.Line l : v.lines()) lines.add(new View.Line(l.text(), l.style(), keep(l.btns(), council)));
+        return new View(v.id(), v.title(), v.nonce(), v.message(), v.kind(), lines, v.fields(), keep(v.buttons(), council));
     }
 
-    private static List<View.Btn> keep(List<View.Btn> in) {
+    private static List<View.Btn> keep(List<View.Btn> in, boolean council) {
         List<View.Btn> out = new ArrayList<>();
         for (View.Btn b : in) {
-            if (!actionAllowed(b.action())) continue;
+            if (!actionAllowed(b.action(), council)) continue;
             if (b.action().equals("open")) {
                 String to = normalizeView(b.args().get("to"));
-                if (!viewAllowed(to)) continue;
+                if (!viewAllowed(to, council)) continue;
                 if (!to.equals(b.args().get("to"))) {
                     Map<String, String> a = new java.util.LinkedHashMap<>(b.args());
                     a.put("to", to);

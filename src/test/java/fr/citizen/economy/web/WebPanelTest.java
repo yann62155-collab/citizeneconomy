@@ -122,16 +122,39 @@ class WebPanelTest {
     }
 
     @Test
-    void councilCannotReachAdminPersonalBankOrCoinActions() throws Exception {
+    void councilManagesTheAdminSideButNotPersonalBankOrCoins() throws Exception {
         String tok = councilToken();
+        // l'administration est accessible depuis la liste des entreprises
+        String home = ui(tok, "open", "{\"to\":\"companies\"}");
+        assertTrue(home.contains("\"admin\"") && home.contains("treasury"), home);
+        assertTrue(ui(tok, "open", "{\"to\":\"admin\"}").startsWith("200|"));
+        assertTrue(ui(tok, "open", "{\"to\":\"adm_companies\"}").contains("Forge Royale"));
+        assertTrue(ui(tok, "open", "{\"to\":\"treasury\"}").startsWith("200|"));
+        // suspension puis reactivation d'une entreprise par le Conseil
+        String sus = ui(tok, "adm.co.suspend", "{\"id\":\"" + taverne + "\",\"f_reason\":\"Controle fiscal\",\"_v\":\"adm_companies\"}");
+        assertTrue(sus.contains("\"kind\":\"ok\""), sus);
+        assertEquals(CompanyStatus.SUSPENDED, eco.companies.get(Actor.council(), taverne).join().status());
+        String act = ui(tok, "adm.co.activate", "{\"id\":\"" + taverne + "\",\"_v\":\"adm_companies\"}");
+        assertTrue(act.contains("\"kind\":\"ok\""), act);
+        assertEquals(CompanyStatus.ACTIVE, eco.companies.get(Actor.council(), taverne).join().status());
+        // toujours interdit : banque personnelle et pieces
         assertTrue(ui(tok, "bank.deposit", "{\"f_amount\":\"5\"}").startsWith("403"));
-        assertTrue(ui(tok, "adm.co.close", "{\"id\":\"" + forge + "\"}").startsWith("403"));
         assertTrue(ui(tok, "cbank.deposit", "{\"id\":\"" + forge + "\"}").startsWith("403"));
-        assertTrue(ui(tok, "open", "{\"to\":\"admin\"}").startsWith("403"));
         assertTrue(ui(tok, "open", "{\"to\":\"bank\"}").startsWith("403"));
-        // et les boutons interdits ne sont meme pas proposes
         String fin = ui(tok, "open", "{\"to\":\"cbank\",\"id\":\"" + forge + "\"}");
         assertFalse(fin.contains("cbank.deposit") || fin.contains("cbank.withdraw"), fin);
+    }
+
+    @Test
+    void ownersNeverGetTheAdminSide() throws Exception {
+        String code = web.codes().issue(alice.id(), "Alice");
+        String tok = post("/api/login", "{\"code\":\"" + code + "\"}", null, true).cookie();
+        assertTrue(ui(tok, "open", "{\"to\":\"admin\"}").startsWith("403"));
+        assertTrue(ui(tok, "open", "{\"to\":\"adm_companies\"}").startsWith("403"));
+        assertTrue(ui(tok, "adm.co.close", "{\"id\":\"" + taverne + "\"}").startsWith("403"));
+        assertEquals(CompanyStatus.ACTIVE, eco.companies.get(Actor.council(), taverne).join().status());
+        String home = ui(tok, "open", "{\"to\":\"companies\"}");
+        assertFalse(home.contains("treasury"), home);
     }
 
     @Test

@@ -55,7 +55,8 @@ Le mod ouvre un site de gestion des entreprises, avec les mêmes écrans et les 
 - **Conseil royal** : mot de passe (par défaut `2007`). Accès patron à toutes les entreprises : employés, salaires, droits, finances de l'entreprise, annonces, factures, impôts.
 
 **Disponible sur le site** : fiche entreprise, employés (recruter, licencier, salaire, grade, droits, gérant), finances (paiements depuis le compte de l'entreprise), annonces, factures, impôts de l'entreprise.
-**Non disponible** : administration du royaume, banque personnelle, dépôt/retrait en pièces (il faut l'inventaire d'un joueur en jeu).
+**Réservé au Conseil royal** : toute la partie administration du menu en jeu (demandes de création, entreprises, joueurs, impôts, transactions, annonces, journal d'audit, réglages, limites, trésorerie royale, sauvegardes). Les patrons n'y ont jamais accès.
+**Non disponible sur le site, pour personne** : banque personnelle, dépôt/retrait en pièces (il faut l'inventaire d'un joueur en jeu).
 
 **Configuration** (fichier de config serveur du mod, section `web`) : `enabled`, `port` (30039), `bindAddress`, `councilPassword`, `publicUrl` (adresse affichée par `/ceconomy web`).
 **À faire :**

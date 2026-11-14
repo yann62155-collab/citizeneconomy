@@ -79,7 +79,7 @@ public final class AnnouncementManager {
         return db.write(c -> {
             Announcement an = get(c, announcementId);
             if (!an.status().equals("ACTIVE")) throw new EconomyException("BAD_STATE", "Cette annonce n'est plus active.");
-            if (actor.admin()) throw new EconomyException("FORBIDDEN", "L'administration supprime ou suspend, elle ne modifie pas le contenu.");
+            if (actor.admin() && !actor.isCouncil()) throw new EconomyException("FORBIDDEN", "L'administration supprime ou suspend, elle ne modifie pas le contenu.");
             Authority a = PermissionManager.authorize(c, actor, an.companyId(), null, true);
             boolean own = an.author().equals(actor.id()) && PermissionManager.has(a.member(), Permission.PUBLISH_ANNOUNCEMENTS);
             if (!own && !PermissionManager.has(a.member(), Permission.MANAGE_ANNOUNCEMENTS))
