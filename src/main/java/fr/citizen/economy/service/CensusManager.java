@@ -100,9 +100,9 @@ public final class CensusManager {
 
     /** Le joueur remplit sa propre fiche ; refuse une fois validee. */
     public CompletableFuture<Void> fill(Actor actor, String firstName, String lastName, String age) {
-        String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
-        int ag = age(age);
         return db.write(c -> {
+            String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
+            int ag = age(age);
             if (actor.isCouncil()) throw new EconomyException("FORBIDDEN", "Le Conseil royal n'a pas de fiche de recensement.");
             long now = System.currentTimeMillis();
             Records.touchPlayer(c, actor.id(), actor.name(), now);
@@ -133,11 +133,11 @@ public final class CensusManager {
 
     /** Un admin corrige une fiche (meme validee). Profession vide = profession automatique de l'entreprise. */
     public CompletableFuture<Void> adminSet(Actor admin, UUID player, String firstName, String lastName, String age, String profession) {
-        String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
-        int ag = age(age);
-        String prof = profession(profession);
         return db.write(c -> {
             PermissionManager.requireAdmin(admin);
+            String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
+            int ag = age(age);
+            String prof = profession(profession);
             if (!Sql.exists(c, "SELECT 1 FROM players WHERE uuid = ?", player))
                 throw new EconomyException("NOT_FOUND", "Joueur inconnu.");
             long now = System.currentTimeMillis();
