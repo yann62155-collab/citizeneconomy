@@ -133,7 +133,7 @@ class DatabaseTest {
                     s.executeUpdate("INSERT INTO players(uuid,name,first_seen,last_seen) VALUES ('" + owner + "','Old',1,1)");
                     for (String n : List.of("Ancienne A", "Ancienne B")) {
                         s.executeUpdate("INSERT INTO companies(uid,name,emblem,description,sector,created_at,updated_at,owner_uuid,status) VALUES ('"
-                                + n + "','" + n + "','','desc','Forge',1,1,'" + owner + "','ACTIVE')");
+                                + n + "','" + n + "','" + (n.endsWith("A") ? "forgeron" : "") + "','desc','Forge',1,1,'" + owner + "','ACTIVE')");
                     }
                     // retour a l'etat "avant V3"
                     s.executeUpdate("DROP INDEX ux_companies_matricule");
@@ -155,6 +155,14 @@ class DatabaseTest {
                 return out;
             }).join();
             assertEquals(List.of("E-0001", "E-0002"), m);
+            List<String> emb = db.read(c -> {
+                List<String> out = new ArrayList<>();
+                try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery("SELECT emblem FROM companies ORDER BY id")) {
+                    while (rs.next()) out.add(rs.getString(1));
+                }
+                return out;
+            }).join();
+            assertEquals(List.of("FOR", ""), emb);
         }
     }
 }

@@ -348,7 +348,7 @@ public final class UiService {
         }
         b.blank();
         b.field("f_name", "Nom (3-32)", toFix == null ? "" : toFix.name(), 32).field("f_sector", "Secteur d'activité", toFix == null ? "" : toFix.sector(), 32)
-                .field("f_desc", "Description", toFix == null ? "" : toFix.description(), 200).field("f_emblem", "Emblème (métier) : " + Emblems.keys(), toFix == null ? "" : toFix.emblem(), 40);
+                .field("f_desc", "Description", toFix == null ? "" : toFix.description(), 200).field("f_emblem", "Emblème (3 lettres) : " + Emblems.keys(), toFix == null ? "" : toFix.emblem(), 40);
         b.button(ViewBuilder.nav("Retour", "main")).button(b.act("Envoyer la demande", "req.submit"));
         if (toFix != null) b.button(b.act("Renvoyer la demande corrigée", "req.update", "r", Long.toString(toFix.id())));
         return b;
@@ -373,7 +373,7 @@ public final class UiService {
         b.g(c.name() + " — " + c.sector() + " [" + statusFr(c.status().name()) + "]");
         b.m("Matricule : " + c.matricule() + "  (à communiquer pour être payé ou facturé)");
         if (!c.description().isBlank()) b.n(clip(c.description(), 100));
-        if (!c.emblem().isBlank() && c.emblem() != null) b.m("Emblème : " + clip(c.emblem(), 40));
+        if (!c.emblem().isBlank() && c.emblem() != null) b.m("Emblème : " + Emblems.label(c.emblem()));
         b.m("Créée le " + day(c.createdAt()) + (me != null ? " · Vous : " + roleFr(me.role()) + " (" + me.grade() + ")" : ""));
         if (c.status() != CompanyStatus.ACTIVE && c.statusReason() != null) b.r("Motif : " + clip(c.statusReason(), 90));
         if (can(a, me, Permission.VIEW_FINANCES)) {
@@ -793,7 +793,7 @@ public final class UiService {
         if (list.isEmpty()) b.m("Aucune entreprise.");
         if (!mode.equals("all")) b.field("f_reason", "Motif (obligatoire)", "", 120);
         else {
-            b.m("Emblème = métier lu par Citizen Métiers : " + Emblems.keys() + ". « banque » et « aucun » = aucune restriction ; vide = détection d'après le secteur.");
+            b.m("Emblème = code à 3 lettres lu par Citizen Métiers : " + Emblems.keys() + ". BAN et AUC = aucune restriction ; vide = détection d'après le secteur.");
             b.field("f_emblem", "Nouvel emblème (puis bouton « Emblème » de l'entreprise)", "", 40);
         }
         b.button(ViewBuilder.nav("Retour", "admin"));

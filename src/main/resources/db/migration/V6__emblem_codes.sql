@@ -1,0 +1,16 @@
+UPDATE companies SET emblem = 'FOR' WHERE lower(emblem) = 'forgeron';
+UPDATE company_requests SET emblem = 'FOR' WHERE lower(emblem) = 'forgeron';
+UPDATE companies SET emblem = 'MEN' WHERE lower(emblem) = 'menuisier';
+UPDATE company_requests SET emblem = 'MEN' WHERE lower(emblem) = 'menuisier';
+UPDATE companies SET emblem = 'RES' WHERE lower(emblem) = 'restaurant';
+UPDATE company_requests SET emblem = 'RES' WHERE lower(emblem) = 'restaurant';
+UPDATE companies SET emblem = 'TAV' WHERE lower(emblem) = 'taverne';
+UPDATE company_requests SET emblem = 'TAV' WHERE lower(emblem) = 'taverne';
+UPDATE companies SET emblem = 'POT' WHERE lower(emblem) = 'potionniste';
+UPDATE company_requests SET emblem = 'POT' WHERE lower(emblem) = 'potionniste';
+UPDATE companies SET emblem = 'POI' WHERE lower(emblem) = 'poissonnier';
+UPDATE company_requests SET emblem = 'POI' WHERE lower(emblem) = 'poissonnier';
+UPDATE companies SET emblem = 'BAN' WHERE lower(emblem) = 'banque';
+UPDATE company_requests SET emblem = 'BAN' WHERE lower(emblem) = 'banque';
+UPDATE companies SET emblem = 'AUC' WHERE lower(emblem) = 'aucun';
+UPDATE company_requests SET emblem = 'AUC' WHERE lower(emblem) = 'aucun';

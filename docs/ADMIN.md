@@ -84,14 +84,14 @@ L'emblème d'une entreprise est son **métier**. Citizen Métiers s'en sert : le
 
 | Emblème | Fabrications réservées |
 |---|---|
-| `forgeron` | armures, lettres beuglantes, cartons |
-| `menuisier` | lettres beuglantes, colis, portes à clé, clés |
-| `restaurant` | toute la nourriture |
-| `taverne` | nourriture et boissons |
-| `potionniste` | potions et totems |
-| `poissonnier` | préparation du poisson |
-| `banque` | aucune restriction |
-| `aucun` | aucune restriction |
+| `FOR` (forgeron) | armures, lettres beuglantes, cartons |
+| `MEN` (menuisier) | lettres beuglantes, colis, portes à clé, clés |
+| `RES` (restaurant) | toute la nourriture |
+| `TAV` (taverne) | nourriture et boissons |
+| `POT` (potionniste) | potions et totems |
+| `POI` (poissonnier) | préparation du poisson |
+| `BAN` (banque) | aucune restriction |
+| `AUC` (aucun) | aucune restriction |
 | *(vide)* | Citizen Métiers devine d'après le secteur et le nom |
 
-À la création d'une entreprise le joueur saisit l'un de ces emblèmes (ou le laisse vide). **Entreprises déjà créées** : Administration → Entreprises, écrire l'emblème dans le champ du bas puis cliquer sur « Emblème » à côté de l'entreprise (aussi possible depuis le panneau web du Conseil royal). Un patron ne peut pas changer l'emblème de sa propre entreprise. Pour qu'une entreprise n'ait aucune restriction pour ses employés, mettre `aucun` (ou `banque`).
+À la création d'une entreprise le joueur saisit l'un de ces codes à 3 lettres (les noms complets sont aussi acceptés et convertis) (ou le laisse vide). **Entreprises déjà créées** : Administration → Entreprises, écrire l'emblème dans le champ du bas puis cliquer sur « Emblème » à côté de l'entreprise (aussi possible depuis le panneau web du Conseil royal). Un patron ne peut pas changer l'emblème de sa propre entreprise. Pour qu'une entreprise n'ait aucune restriction pour ses employés, mettre `AUC` (ou `BAN`).

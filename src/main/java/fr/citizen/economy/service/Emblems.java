@@ -6,20 +6,20 @@ import java.util.Locale;
 
 /**
  * Emblemes d'entreprise = metier lu par Citizen Metiers. Un emblème actif restreint les fabrications aux membres de l'entreprise ;
- * "banque" et "aucun" n'imposent aucune restriction. Vide = Citizen Metiers devine le metier d'apres le secteur et le nom.
+ * BAN et AUC n'imposent aucune restriction. Vide = Citizen Metiers devine le metier d'apres le secteur et le nom.
  */
 public final class Emblems {
-    public record Emblem(String key, String label, String description) { }
+    public record Emblem(String key, String name, String label, String description) { }
 
     public static final List<Emblem> ALL = List.of(
-            new Emblem("forgeron", "Forgeron", "armures, lettres beuglantes, cartons"),
-            new Emblem("menuisier", "Menuisier", "lettres beuglantes, colis, portes à clé, clés"),
-            new Emblem("restaurant", "Restaurant", "toute la nourriture"),
-            new Emblem("taverne", "Taverne", "toute la nourriture et les boissons"),
-            new Emblem("potionniste", "Potionniste", "potions et totems"),
-            new Emblem("poissonnier", "Poissonnier", "préparation du poisson"),
-            new Emblem("banque", "Banque", "aucune restriction"),
-            new Emblem("aucun", "Aucun", "aucune restriction"));
+            new Emblem("FOR", "forgeron", "Forgeron", "armures, lettres beuglantes, cartons"),
+            new Emblem("MEN", "menuisier", "Menuisier", "lettres beuglantes, colis, portes à clé, clés"),
+            new Emblem("RES", "restaurant", "Restaurant", "toute la nourriture"),
+            new Emblem("TAV", "taverne", "Taverne", "toute la nourriture et les boissons"),
+            new Emblem("POT", "potionniste", "Potionniste", "potions et totems"),
+            new Emblem("POI", "poissonnier", "Poissonnier", "préparation du poisson"),
+            new Emblem("BAN", "banque", "Banque", "aucune restriction"),
+            new Emblem("AUC", "aucun", "Aucun", "aucune restriction"));
 
     private Emblems() { }
 
@@ -27,13 +27,14 @@ public final class Emblems {
     public static String parse(String input) {
         String v = norm(input);
         if (v.isEmpty()) return "";
-        for (Emblem e : ALL) if (e.key().equals(v) || norm(e.label()).equals(v)) return e.key();
-        throw new EconomyException("BAD_EMBLEM", "Emblème inconnu. Choix : " + keys() + ".");
+        for (Emblem e : ALL) if (norm(e.key()).equals(v) || e.name().equals(v) || norm(e.label()).equals(v)) return e.key();
+        throw new EconomyException("BAD_EMBLEM", "Emblème inconnu. Codes : " + keys() + ".");
     }
 
     public static String label(String key) {
         if (key == null || key.isBlank()) return "Non défini (détecté d'après le secteur)";
-        for (Emblem e : ALL) if (e.key().equals(key)) return e.label();
+        String k = norm(key);
+        for (Emblem e : ALL) if (norm(e.key()).equals(k) || e.name().equals(k)) return e.label() + " (" + e.key() + ")";
         return key; // ancien emblème en texte libre
     }
 

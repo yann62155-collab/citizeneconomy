@@ -379,9 +379,9 @@ class UiServiceTest {
         // emblemes : refus d'une valeur inconnue, changement par l'admin, jamais par le patron
         assertEquals("err", act(admin, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "dragon", "_v", "adm_companies").kind());
         assertEquals("ok", act(admin, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "forgeron", "_v", "adm_companies").kind());
-        assertEquals("forgeron", eco.companies.get(admin, forge.id()).join().emblem());
+        assertEquals("FOR", eco.companies.get(admin, forge.id()).join().emblem());
         assertEquals("err", act(alice, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "aucun", "_v", "adm_companies").kind());
-        assertEquals("forgeron", eco.companies.get(admin, forge.id()).join().emblem());
+        assertEquals("FOR", eco.companies.get(admin, forge.id()).join().emblem());
         // fiche du joueur en lecture seule : plus de saisie par le joueur
         View mine = act(alice, "open", "to", "census");
         assertTrue(mine.fields().isEmpty());

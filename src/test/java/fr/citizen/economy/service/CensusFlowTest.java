@@ -144,19 +144,19 @@ class CensusFlowTest {
     @Test
     void emblemsAreCheckedAndAdminsCanChangeThemOnExistingCompanies() {
         assertEquals("", Emblems.parse(""));
-        assertEquals("forgeron", Emblems.parse(" Forgeron "));
-        assertEquals("restaurant", Emblems.parse("RESTAURANT"));
+        assertEquals("FOR", Emblems.parse(" Forgeron "));
+        assertEquals("RES", Emblems.parse("res")); assertEquals("RES", Emblems.parse("RESTAURANT"));
         assertThrows(EconomyException.class, () -> Emblems.parse("sorcier"));
         assertEquals("BAD_EMBLEM", code(() -> companies.submitRequest(smith, "Mauvais Embleme", "Description ok", "Forge", "sorcier").join()));
         long req = companies.submitRequest(smith, "Forge Royale", "Armes et armures", "Forgeron", "Forgeron").join();
         long id = companies.accept(admin, req, "").join();
-        assertEquals("forgeron", companies.get(admin, id).join().emblem());
+        assertEquals("FOR", companies.get(admin, id).join().emblem());
         // un patron ne change pas son propre emblème (sinon il se retirerait les restrictions)
         assertEquals("FORBIDDEN", code(() -> companies.setEmblem(smith, id, "aucun").join()));
         companies.setEmblem(admin, id, "Aucun").join();
-        assertEquals("aucun", companies.get(admin, id).join().emblem());
+        assertEquals("AUC", companies.get(admin, id).join().emblem());
         companies.setEmblem(Actor.council(), id, "taverne").join();
-        assertEquals("taverne", companies.get(admin, id).join().emblem());
+        assertEquals("TAV", companies.get(admin, id).join().emblem());
         assertEquals("BAD_EMBLEM", code(() -> companies.setEmblem(admin, id, "dragon").join()));
     }
 }
