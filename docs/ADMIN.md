@@ -71,3 +71,27 @@ Le mod ouvre un site de gestion des entreprises, avec les mêmes écrans et les 
 - Tant que sa fiche n'est pas validée, le joueur reçoit un rappel cliquable à chaque connexion.
 - Administration : `/recensement admin`, bouton « Recensement » du menu d'administration, ou le panneau web du Conseil royal. On peut corriger, valider, rouvrir au joueur ou effacer une fiche. Chaque action est inscrite au journal et notifiée au joueur.
 - Les fiches sont affichées dans la liste Tab par le mod **Citizen Tab** (à la place du pseudo), via l'API `fr.citizen.economy.api.Recensement`.
+
+## Personnel du royaume et recensement
+
+**Employés de la couronne** : Administration → *Personnel du royaume* (ou panneau web du Conseil royal). Recruter un joueur (pseudo ou n° de hibou), lui donner un titre (ex. Greffier) et un salaire en PO par période de paie. Le salaire est versé par la **trésorerie royale** à chaque paie, une seule fois par période, comme les salaires d'entreprise. Si la trésorerie est vide, le salaire est impayé et l'employé est prévenu.
+
+**Recensement** : seuls les employés de la couronne, les admins et le Conseil royal peuvent recenser. `/recensement` est refusée aux autres joueurs. L'agent ouvre la liste des citoyens, remplit la fiche (prénom, nom, âge, profession facultative), enregistre puis valide. Un joueur voit seulement sa propre fiche, sans pouvoir la modifier.
+
+## Emblèmes des entreprises (restrictions de Citizen Métiers)
+
+L'emblème d'une entreprise est son **métier**. Citizen Métiers s'en sert : les joueurs qui n'appartiennent pas à une entreprise du bon métier sont bloqués pour les fabrications réservées.
+
+| Emblème | Fabrications réservées |
+|---|---|
+| `forgeron` | armures, lettres beuglantes, cartons |
+| `menuisier` | lettres beuglantes, colis, portes à clé, clés |
+| `restaurant` | toute la nourriture |
+| `taverne` | nourriture et boissons |
+| `potionniste` | potions et totems |
+| `poissonnier` | préparation du poisson |
+| `banque` | aucune restriction |
+| `aucun` | aucune restriction |
+| *(vide)* | Citizen Métiers devine d'après le secteur et le nom |
+
+À la création d'une entreprise le joueur saisit l'un de ces emblèmes (ou le laisse vide). **Entreprises déjà créées** : Administration → Entreprises, écrire l'emblème dans le champ du bas puis cliquer sur « Emblème » à côté de l'entreprise (aussi possible depuis le panneau web du Conseil royal). Un patron ne peut pas changer l'emblème de sa propre entreprise. Pour qu'une entreprise n'ait aucune restriction pour ses employés, mettre `aucun` (ou `banque`).

@@ -20,6 +20,7 @@ public final class Economy {
     public final NotificationManager notifications;
     public final AdminManager admin;
     public final CensusManager census;
+    public final RoyalStaffManager staff;
     public final EconomyScheduler scheduler;
 
     public Economy(Database db, Consumer<String> log) {
@@ -37,6 +38,7 @@ public final class Economy {
         notifications = new NotificationManager(db);
         admin = new AdminManager(db);
         census = new CensusManager(db);
+        staff = new RoyalStaffManager(db);
         scheduler = new EconomyScheduler(db, tax, payroll, invoices, notifications, System::currentTimeMillis, log);
     }
 }

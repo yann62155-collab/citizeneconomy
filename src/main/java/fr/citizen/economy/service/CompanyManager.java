@@ -31,7 +31,7 @@ public final class CompanyManager {
             String n = Validation.companyName(name);
             String d = Validation.optional(description, MAX_DESC, "Description");
             String s = Validation.text(sector, 2, 32, "Secteur");
-            String e = Validation.optional(emblem, 64, "Embleme");
+            String e = Emblems.parse(emblem);
             long now = System.currentTimeMillis();
             Records.touchPlayer(c, actor.id(), actor.name(), now);
             if (Sql.exists(c, "SELECT 1 FROM company_requests WHERE applicant_uuid = ? AND status IN ('PENDING','CHANGES_REQUESTED')", actor.id()))
@@ -54,7 +54,7 @@ public final class CompanyManager {
             String n = Validation.companyName(name);
             String d = Validation.optional(description, MAX_DESC, "Description");
             String s = Validation.text(sector, 2, 32, "Secteur");
-            String e = Validation.optional(emblem, 64, "Embleme");
+            String e = Emblems.parse(emblem);
             ensureNameFree(c, n, requestId);
             long now = System.currentTimeMillis();
             Sql.update(c, "UPDATE company_requests SET name=?, description=?, sector=?, emblem=?, status='PENDING', admin_note=NULL WHERE id=?",
@@ -140,6 +140,20 @@ public final class CompanyManager {
     // ------------------------------------------------------------------ statut administratif
 
     /** ACTIVE <-> SUSPENDED, puis CLOSED (definitif). Une entreprise ne peut etre fermee qu'avec un compte a 0. */
+    /** Modifie l'embleme (metier lu par Citizen Metiers) d'une entreprise existante. Admin ou Conseil royal uniquement. */
+    public CompletableFuture<Void> setEmblem(Actor admin, long companyId, String emblem) {
+        return db.write(c -> {
+            PermissionManager.requireAdmin(admin);
+            String e = Emblems.parse(emblem);
+            Company co = Records.company(c, companyId);
+            long now = System.currentTimeMillis();
+            Sql.update(c, "UPDATE companies SET emblem = ?, updated_at = ? WHERE id = ?", e, now, companyId);
+            Records.audit(c, admin.id(), "COMPANY_EMBLEM", "company", companyId, co.matricule() + " : " + (e.isEmpty() ? "automatique" : e), now);
+            Records.notify(c, co.owner(), "COMPANY_EMBLEM", "L'emblème de « " + co.name() + " » est maintenant : " + Emblems.label(e) + ".", now);
+            return null;
+        });
+    }
+
     public CompletableFuture<Void> setStatus(Actor admin, long companyId, CompanyStatus target, String reason) {
         return db.write(c -> {
             PermissionManager.requireAdmin(admin);

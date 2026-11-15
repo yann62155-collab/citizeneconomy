@@ -25,6 +25,33 @@ public final class PayrollManager {
         return UUID.nameUUIDFromBytes(("citizeneconomy:salary:" + employeeId + ":" + periodKey).getBytes(StandardCharsets.UTF_8));
     }
 
+    public static UUID royalSalaryTxId(UUID player, long periodKey) {
+        return UUID.nameUUIDFromBytes(("citizeneconomy:royalsalary:" + player + ":" + periodKey).getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** Paie des employes de la couronne depuis la tresorerie royale (meme garantie : jamais deux fois la meme periode). @return {payes, deja payes, impayes} */
+    public CompletableFuture<int[]> runRoyal(long periodKey) {
+        return db.write(c -> {
+            int paid = 0, already = 0, unpaid = 0;
+            long now = System.currentTimeMillis();
+            for (String[] row : Sql.query(c, "SELECT player_uuid, salary FROM royal_staff WHERE salary > 0 ORDER BY hired_at", rs -> new String[]{rs.getString(1), rs.getString(2)})) {
+                UUID player = UUID.fromString(row[0]);
+                long salary = Long.parseLong(row[1]);
+                try {
+                    TxResult r = TransactionManager.apply(c, new TxRequest(royalSalaryTxId(player, periodKey), TxType.ROYAL_EXPENSE, salary,
+                            AccountRef.treasury(), AccountRef.personal(player), "Salaire de la couronne", null));
+                    if (r.replayed()) already++;
+                    else { paid++; Records.notify(c, player, "SALARY_PAID", "Salaire de la couronne reçu : " + salary + " PO.", now); }
+                } catch (EconomyException e) {
+                    if (!e.code().equals("INSUFFICIENT_FUNDS")) throw e;
+                    unpaid++;
+                    Records.notify(c, player, "SALARY_UNPAID", "Salaire de la couronne impayé : la trésorerie royale est insuffisante.", now);
+                }
+            }
+            return new int[]{paid, already, unpaid};
+        });
+    }
+
     public CompletableFuture<Report> runCompany(long companyId, long periodKey) {
         return db.write(c -> {
             Company co = Records.company(c, companyId);
@@ -67,6 +94,6 @@ public final class PayrollManager {
                         acc = acc.thenCompose(list -> runCompany(id, periodKey).thenApply(r -> { list.add(r); return list; }));
                     }
                     return acc;
-                });
+                }).thenCompose(list -> runRoyal(periodKey).thenApply(x -> list));
     }
 }

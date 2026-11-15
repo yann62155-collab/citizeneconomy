@@ -18,16 +18,14 @@ public final class Commands {
         root.then(open("create", "create", false));
         root.then(open("bank", "bank", false));
         root.then(open("announcements", "board", false));
-        root.then(open("recensement", "census", false));
+        root.then(net.minecraft.commands.Commands.literal("recensement").executes(c -> census(c.getSource())));
         root.then(open("treasury", "treasury", true));
         root.then(open("admin", "admin", true));
         root.then(net.minecraft.commands.Commands.literal("web").executes(c -> web(c.getSource())));
         root.then(net.minecraft.commands.Commands.literal("help").executes(c -> help(c.getSource())));
         d.register(root);
-        // Raccourci du recensement des citoyens (aussi propose a la connexion tant que la fiche n'est pas validee)
-        d.register(net.minecraft.commands.Commands.literal("recensement")
-                .executes(c -> open(c.getSource(), "census"))
-                .then(open("admin", "adm_census", true)));
+        // Recensement des citoyens : reserve aux employes de la couronne (et aux admins)
+        d.register(net.minecraft.commands.Commands.literal("recensement").executes(c -> census(c.getSource())));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> open(String name, String view, boolean adminOnly) {
@@ -47,6 +45,29 @@ public final class Commands {
             return 0;
         }
         rt.open(p, view);
+        return 1;
+    }
+
+    private static int census(CommandSourceStack src) {
+        if (!(src.getEntity() instanceof ServerPlayer p)) {
+            src.sendFailure(Component.literal("Commande réservée aux joueurs."));
+            return 0;
+        }
+        EconomyRuntime rt = EconomyRuntime.current();
+        if (rt == null) {
+            src.sendFailure(Component.literal("L'économie n'est pas disponible."));
+            return 0;
+        }
+        rt.executor().execute(() -> {
+            boolean ok;
+            try { ok = rt.economy().census.canCensus(Admins.actor(p)).join(); } catch (RuntimeException e) { ok = false; }
+            final boolean allowed = ok;
+            p.server.execute(() -> {
+                if (!allowed) p.sendSystemMessage(Component.literal("Le recensement est réservé aux employés de la couronne. Présentez-vous à l'un d'eux pour être recensé.")
+                        .withStyle(net.minecraft.ChatFormatting.RED));
+                else rt.open(p, "adm_census");
+            });
+        });
         return 1;
     }
 
@@ -79,8 +100,7 @@ public final class Commands {
                 "/ceconomy : menu principal (touche K)",
                 "/ceconomy bank : banque et monnaie",
                 "/ceconomy company : mes entreprises",
-                "/recensement : votre fiche de citoyen (prénom, nom, âge, profession)",
-                "/recensement admin : recensement de tous les citoyens (admin)",
+                "/recensement : recenser les citoyens (réservé aux employés de la couronne et aux admins)",
                 "/ceconomy create : demander la création d'une entreprise",
                 "/ceconomy announcements : annonces publiques",
                 "/ceconomy web : code de connexion au panneau web des entreprises (patrons)",

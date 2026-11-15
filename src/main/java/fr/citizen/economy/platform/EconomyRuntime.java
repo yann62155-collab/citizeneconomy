@@ -170,11 +170,7 @@ public final class EconomyRuntime {
 
     private static void remindCensus(ServerPlayer player) {
         player.sendSystemMessage(Component.literal("[Recensement] ").withStyle(net.minecraft.ChatFormatting.GOLD)
-                .append(Component.literal("Le royaume ne vous a pas encore recensé. ").withStyle(net.minecraft.ChatFormatting.YELLOW))
-                .append(Component.literal("[Se faire recenser]").withStyle(style -> style.withColor(net.minecraft.ChatFormatting.GOLD).withUnderlined(true)
-                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/recensement"))
-                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
-                                Component.literal("Ouvre le recensement (ou tapez /recensement)"))))));
+                .append(Component.literal("Le royaume ne vous a pas encore recensé. Présentez-vous à un employé de la couronne.").withStyle(net.minecraft.ChatFormatting.YELLOW)));
     }
 
     /** Ouvre un ecran pour un joueur (commandes, raccourci). */

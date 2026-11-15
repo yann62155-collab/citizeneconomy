@@ -46,30 +46,52 @@ class CensusFlowTest {
         return ((EconomyException) EconomyException.unwrap(e)).code();
     }
 
+    RoyalStaffManager staff;
+    final Actor clerk = new Actor(UUID.randomUUID(), "Greffier", false);
+
+    void hireClerk() {
+        players.touch(clerk).join();
+        staff = new RoyalStaffManager(db);
+        staff.hire(admin, clerk.id(), clerk.name(), "Greffier", 50).join();
+    }
+
     @Test
-    void playerFillsValidatesThenIsLocked() {
-        census.fill(smith, " Aldric ", "Valmont", "32").join();
-        census.validate(smith).join();
+    void onlyRoyalStaffAndAdminsDoTheCensus() {
+        hireClerk();
+        // un simple joueur ne peut rien faire, ni pour lui-meme
+        assertEquals("FORBIDDEN", code(() -> census.adminSet(smith, smith.id(), "Aldric", "Valmont", "32", "").join()));
+        assertEquals("FORBIDDEN", code(() -> census.adminValidate(smith, smith.id()).join()));
+        assertEquals("FORBIDDEN", code(() -> census.list(smith, 50).join()));
+        assertFalse(census.canCensus(smith).join());
+        // l'employe de la couronne recense un citoyen, puis valide
+        assertTrue(census.canCensus(clerk).join());
+        census.adminSet(clerk, smith.id(), " Aldric ", "Valmont", "32", "").join();
+        census.adminValidate(clerk, smith.id()).join();
         CensusManager.Entry e = census.get(smith.id()).join().orElseThrow();
         assertEquals("Aldric", e.firstName());
-        assertEquals(32, e.age());
         assertTrue(e.validated());
-        assertEquals("LOCKED", code(() -> census.fill(smith, "Autre", "Nom", "20").join()));
-        assertEquals("LOCKED", code(() -> census.validate(smith).join()));
+        assertEquals(4, census.list(clerk, 50).join().size());
+        // renvoye : plus aucun droit
+        staff.fire(admin, clerk.id()).join();
+        assertFalse(census.canCensus(clerk).join());
+        assertEquals("FORBIDDEN", code(() -> census.adminUnlock(clerk, smith.id()).join()));
+        // admin et Conseil royal gardent l'acces
+        assertTrue(census.canCensus(admin).join());
+        assertTrue(census.canCensus(Actor.council()).join());
     }
 
     @Test
     void invalidInputsAreRefused() {
-        assertEquals("BAD_TEXT", code(() -> census.fill(smith, "", "Valmont", "32").join()));
-        assertEquals("BAD_TEXT", code(() -> census.fill(smith, "Ald§ric", "Valmont", "32").join()));
-        assertEquals("BAD_AGE", code(() -> census.fill(smith, "Aldric", "Valmont", "abc").join()));
-        assertEquals("BAD_AGE", code(() -> census.fill(smith, "Aldric", "Valmont", "0").join()));
-        assertEquals("NOT_FOUND", code(() -> census.validate(nobody).join()));
+        assertEquals("BAD_TEXT", code(() -> census.adminSet(admin, smith.id(), "", "Valmont", "32", "").join()));
+        assertEquals("BAD_TEXT", code(() -> census.adminSet(admin, smith.id(), "Ald§ric", "Valmont", "32", "").join()));
+        assertEquals("BAD_AGE", code(() -> census.adminSet(admin, smith.id(), "Aldric", "Valmont", "abc", "").join()));
+        assertEquals("BAD_AGE", code(() -> census.adminSet(admin, smith.id(), "Aldric", "Valmont", "0", "").join()));
+        assertEquals("NOT_FOUND", code(() -> census.adminValidate(admin, nobody.id()).join()));
     }
 
     @Test
     void professionComesFromCompanyUnlessAdminSetsOne() {
-        census.fill(smith, "Aldric", "Valmont", "32").join();
+        census.adminSet(admin, smith.id(), "Aldric", "Valmont", "32", "").join();
         assertEquals(CensusManager.NO_JOB, census.cards().join().get(smith.id()).profession());
 
         long req = companies.submitRequest(smith, "Forge Royale", "Armes et armures", "Forgeron", "").join();
@@ -84,17 +106,57 @@ class CensusFlowTest {
     }
 
     @Test
-    void adminToolsAndPermissions() {
-        census.fill(smith, "Aldric", "Valmont", "32").join();
-        census.validate(smith).join();
-        assertEquals("FORBIDDEN", code(() -> census.adminUnlock(smith, smith.id()).join()));
-        census.adminUnlock(admin, smith.id()).join();
-        census.fill(smith, "Aldric", "Valmont", "34").join();
+    void unlockValidateDeleteTools() {
+        census.adminSet(admin, smith.id(), "Aldric", "Valmont", "32", "").join();
         census.adminValidate(admin, smith.id()).join();
-        assertTrue(census.get(smith.id()).join().orElseThrow().validated());
+        census.adminUnlock(admin, smith.id()).join();
+        assertFalse(census.get(smith.id()).join().orElseThrow().validated());
+        census.adminValidate(admin, smith.id()).join();
         assertEquals(3, census.list(admin, 50).join().size());
         census.adminDelete(admin, smith.id()).join();
         assertTrue(census.get(smith.id()).join().isEmpty());
         assertEquals("NOT_FOUND", code(() -> census.adminDelete(admin, smith.id()).join()));
+    }
+
+    @Test
+    void royalStaffIsPaidFromTheTreasuryOncePerPeriod() {
+        hireClerk();
+        TreasuryManager treasury = new TreasuryManager(db);
+        PayrollManager payroll = new PayrollManager(db);
+        BankManager bank = new BankManager(db);
+        // tresorerie vide : impaye, aucune transaction
+        assertEquals("[0, 0, 1]", java.util.Arrays.toString(payroll.runRoyal(1).join()));
+        treasury.addRevenue(admin, UUID.randomUUID(), 500, "Amende").join();
+        assertEquals("[1, 0, 0]", java.util.Arrays.toString(payroll.runRoyal(2).join()));
+        assertEquals(50, bank.personalBalance(clerk).join());
+        assertEquals(450, treasury.balance(admin).join());
+        // meme periode relancee : jamais deux fois
+        assertEquals("[0, 1, 0]", java.util.Arrays.toString(payroll.runRoyal(2).join()));
+        assertEquals(50, bank.personalBalance(clerk).join());
+        assertEquals("FORBIDDEN", code(() -> staff.hire(smith, smith.id(), "Smith", "Scribe", 10).join()));
+        assertEquals("ALREADY_STAFF", code(() -> staff.hire(admin, clerk.id(), "Greffier", "Greffier", 10).join()));
+        assertEquals("BAD_AMOUNT", code(() -> staff.update(admin, clerk.id(), "", 2_000_000).join()));
+        staff.update(admin, clerk.id(), "", 80).join();
+        assertEquals("Greffier", staff.list(admin).join().get(0).title());
+        assertEquals(80, staff.list(admin).join().get(0).salary());
+    }
+
+    @Test
+    void emblemsAreCheckedAndAdminsCanChangeThemOnExistingCompanies() {
+        assertEquals("", Emblems.parse(""));
+        assertEquals("forgeron", Emblems.parse(" Forgeron "));
+        assertEquals("restaurant", Emblems.parse("RESTAURANT"));
+        assertThrows(EconomyException.class, () -> Emblems.parse("sorcier"));
+        assertEquals("BAD_EMBLEM", code(() -> companies.submitRequest(smith, "Mauvais Embleme", "Description ok", "Forge", "sorcier").join()));
+        long req = companies.submitRequest(smith, "Forge Royale", "Armes et armures", "Forgeron", "Forgeron").join();
+        long id = companies.accept(admin, req, "").join();
+        assertEquals("forgeron", companies.get(admin, id).join().emblem());
+        // un patron ne change pas son propre emblème (sinon il se retirerait les restrictions)
+        assertEquals("FORBIDDEN", code(() -> companies.setEmblem(smith, id, "aucun").join()));
+        companies.setEmblem(admin, id, "Aucun").join();
+        assertEquals("aucun", companies.get(admin, id).join().emblem());
+        companies.setEmblem(Actor.council(), id, "taverne").join();
+        assertEquals("taverne", companies.get(admin, id).join().emblem());
+        assertEquals("BAD_EMBLEM", code(() -> companies.setEmblem(admin, id, "dragon").join()));
     }
 }

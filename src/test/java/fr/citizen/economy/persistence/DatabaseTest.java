@@ -138,6 +138,7 @@ class DatabaseTest {
                     // retour a l'etat "avant V3"
                     s.executeUpdate("DROP INDEX ux_companies_matricule");
                     s.executeUpdate("ALTER TABLE companies DROP COLUMN matricule");
+                    s.executeUpdate("DROP TABLE royal_staff");
                     s.executeUpdate("DROP TABLE census");
                     s.executeUpdate("DELETE FROM schema_version WHERE version >= 3");
                 }

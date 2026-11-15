@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 /**
  * Recensement des citoyens du royaume : prenom, nom, age, profession.
- * Le joueur remplit prenom, nom et age puis valide ; ensuite seule l'administration (ou le Conseil royal) peut modifier.
+ * Realise par les employes de la couronne (et les admins) : ils remplissent la fiche d'un citoyen puis la valident.
  * La profession est le secteur de son entreprise (proprietaire, sinon gerant, sinon employe), sauf si un admin en fixe une.
  */
 public final class CensusManager {
@@ -83,7 +83,7 @@ public final class CensusManager {
 
     public CompletableFuture<List<Row>> list(Actor admin, int limit) {
         return db.read(c -> {
-            PermissionManager.requireAdmin(admin);
+            requireCensus(c, admin);
             return Sql.query(c, "SELECT p.uuid, p.name, c.player_uuid, p.name, c.first_name, c.last_name, c.age, c.profession, c.validated, c.updated_at "
                             + "FROM players p LEFT JOIN census c ON c.player_uuid = p.uuid "
                             + "ORDER BY c.validated IS NULL, c.validated, c.last_name, c.first_name, p.name LIMIT ?",
@@ -96,45 +96,24 @@ public final class CensusManager {
         });
     }
 
-    // ------------------------------------------------------------------ joueur
+    // ------------------------------------------------------------------ droits
 
-    /** Le joueur remplit sa propre fiche ; refuse une fois validee. */
-    public CompletableFuture<Void> fill(Actor actor, String firstName, String lastName, String age) {
-        return db.write(c -> {
-            String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
-            int ag = age(age);
-            if (actor.isCouncil()) throw new EconomyException("FORBIDDEN", "Le Conseil royal n'a pas de fiche de recensement.");
-            long now = System.currentTimeMillis();
-            Records.touchPlayer(c, actor.id(), actor.name(), now);
-            Optional<Entry> cur = Sql.one(c, SELECT + "WHERE c.player_uuid = ?", ENTRY, actor.id());
-            if (cur.isPresent() && cur.get().validated())
-                throw new EconomyException("LOCKED", "Votre recensement est validé : seule l'administration peut le modifier.");
-            Sql.update(c, "INSERT INTO census(player_uuid,first_name,last_name,age,updated_at) VALUES (?,?,?,?,?) "
-                    + "ON CONFLICT(player_uuid) DO UPDATE SET first_name = excluded.first_name, last_name = excluded.last_name, "
-                    + "age = excluded.age, updated_at = excluded.updated_at", actor.id(), fn, ln, ag, now);
-            return null;
-        });
+    /** Seuls les employes de la couronne, les admins et le Conseil royal realisent le recensement. */
+    static void requireCensus(java.sql.Connection c, Actor actor) throws java.sql.SQLException {
+        if (actor.admin() || actor.isCouncil() || RoyalStaffManager.isStaff(c, actor.id())) return;
+        throw new EconomyException("FORBIDDEN", "Le recensement est réservé aux employés de la couronne.");
     }
 
-    public CompletableFuture<Void> validate(Actor actor) {
-        return db.write(c -> {
-            Entry e = Sql.one(c, SELECT + "WHERE c.player_uuid = ?", ENTRY, actor.id())
-                    .orElseThrow(() -> new EconomyException("NOT_FOUND", "Remplissez d'abord votre prénom, votre nom et votre âge."));
-            if (e.validated()) throw new EconomyException("LOCKED", "Votre recensement est déjà validé.");
-            if (!e.complete()) throw new EconomyException("INCOMPLETE", "Recensement incomplet : prénom, nom et âge sont obligatoires.");
-            long now = System.currentTimeMillis();
-            Sql.update(c, "UPDATE census SET validated = 1, validated_at = ?, updated_at = ? WHERE player_uuid = ?", now, now, actor.id());
-            Records.audit(c, actor.id(), "CENSUS_VALIDATE", "PLAYER", actor.id(), e.firstName() + " " + e.lastName() + ", " + e.age() + " ans", now);
-            return null;
-        });
+    public CompletableFuture<Boolean> canCensus(Actor actor) {
+        return db.read(c -> actor.admin() || actor.isCouncil() || RoyalStaffManager.isStaff(c, actor.id()));
     }
 
     // ------------------------------------------------------------------ administration
 
-    /** Un admin corrige une fiche (meme validee). Profession vide = profession automatique de l'entreprise. */
+    /** Un agent de la couronne ou un admin remplit/corrige une fiche (meme validee). Profession vide = profession automatique de l'entreprise. */
     public CompletableFuture<Void> adminSet(Actor admin, UUID player, String firstName, String lastName, String age, String profession) {
         return db.write(c -> {
-            PermissionManager.requireAdmin(admin);
+            requireCensus(c, admin);
             String fn = name(firstName, "Prénom"), ln = name(lastName, "Nom");
             int ag = age(age);
             String prof = profession(profession);
@@ -152,7 +131,7 @@ public final class CensusManager {
 
     public CompletableFuture<Void> adminUnlock(Actor admin, UUID player) {
         return db.write(c -> {
-            PermissionManager.requireAdmin(admin);
+            requireCensus(c, admin);
             long now = System.currentTimeMillis();
             if (Sql.update(c, "UPDATE census SET validated = 0, validated_at = NULL, updated_at = ? WHERE player_uuid = ?", now, player) == 0)
                 throw new EconomyException("NOT_FOUND", "Ce joueur n'est pas recensé.");
@@ -164,7 +143,7 @@ public final class CensusManager {
 
     public CompletableFuture<Void> adminValidate(Actor admin, UUID player) {
         return db.write(c -> {
-            PermissionManager.requireAdmin(admin);
+            requireCensus(c, admin);
             Entry e = Sql.one(c, SELECT + "WHERE c.player_uuid = ?", ENTRY, player)
                     .orElseThrow(() -> new EconomyException("NOT_FOUND", "Ce joueur n'est pas recensé."));
             if (!e.complete()) throw new EconomyException("INCOMPLETE", "Fiche incomplète : prénom, nom et âge sont obligatoires.");
@@ -177,7 +156,7 @@ public final class CensusManager {
 
     public CompletableFuture<Void> adminDelete(Actor admin, UUID player) {
         return db.write(c -> {
-            PermissionManager.requireAdmin(admin);
+            requireCensus(c, admin);
             long now = System.currentTimeMillis();
             if (Sql.update(c, "DELETE FROM census WHERE player_uuid = ?", player) == 0)
                 throw new EconomyException("NOT_FOUND", "Ce joueur n'est pas recensé.");

@@ -155,7 +155,7 @@ class UiServiceTest {
 
     @Test
     void companyCreationFlowThroughUi() {
-        View v = act(alice, "req.submit", "f_name", "Forge Royale", "f_desc", "Armes et armures pour le royaume", "f_sector", "Forge", "f_emblem", "marteau", "_v", "create");
+        View v = act(alice, "req.submit", "f_name", "Forge Royale", "f_desc", "Armes et armures pour le royaume", "f_sector", "Forge", "f_emblem", "forgeron", "_v", "create");
         assertEquals("ok", v.kind(), v.message());
         v = act(admin, "open", "to", "adm_requests");
         assertTrue(text(v).contains("Forge Royale"));
@@ -351,5 +351,40 @@ class UiServiceTest {
         assertEquals("ok", act(alice, "inv.create", "id", Long.toString(forge.id()), "kind", "company", "f_target", taverne.matricule(),
                 "f_desc", "Fer", "f_amount", "20", "_v", "cinvoices").kind());
         assertEquals(1, eco.invoices.receivedByCompany(bob, taverne.id(), null, 10).join().size());
+    }
+
+    @Test
+    void royalStaffScreensEmblemsAndCensusAccess() {
+        act(alice, "req.submit", "f_name", "Forge Royale", "f_desc", "Armes et armures", "f_sector", "Forge", "f_emblem", "", "_v", "create");
+        long rid = eco.companies.pendingRequests(admin).join().get(0).id();
+        act(admin, "adm.req.accept", "r", Long.toString(rid), "f_note", "ok", "_v", "adm_requests");
+        Company forge = eco.companies.companiesOf(alice.id()).join().get(0);
+        // le recensement est ferme a un simple joueur, meme par l'ecran
+        assertEquals("err", act(bob, "open", "to", "adm_census").kind());
+        assertEquals("err", act(bob, "adm.census.save", "p", bob.id().toString(), "f_first", "Bob", "f_last", "Durand", "f_age", "20", "_v", "adm_census_p").kind());
+        // l'admin recrute Bob comme employe de la couronne
+        View staff = act(admin, "open", "to", "adm_staff");
+        assertNotEquals("err", staff.kind());
+        assertEquals("ok", act(admin, "adm.staff.hire", "f_player", "Bob", "f_title", "Greffier", "f_salary", "40", "_v", "adm_staff").kind());
+        assertTrue(text(act(admin, "open", "to", "adm_staff")).contains("Bob"));
+        // Bob (non admin) recense Alice
+        assertTrue(eco.census.canCensus(bob).join());
+        assertNotEquals("err", act(bob, "open", "to", "adm_census").kind());
+        assertEquals("ok", act(bob, "adm.census.save", "p", alice.id().toString(), "f_first", "Alice", "f_last", "Martin", "f_age", "25", "f_prof", "", "_v", "adm_census_p").kind());
+        assertEquals("ok", act(bob, "adm.census.validate", "p", alice.id().toString(), "_v", "adm_census_p").kind());
+        assertTrue(eco.census.get(alice.id()).join().orElseThrow().validated());
+        // mais Bob n'est pas admin : pas d'ecran admin ni de gestion du personnel
+        assertEquals("err", act(bob, "open", "to", "adm_staff").kind());
+        assertEquals("err", act(bob, "adm.staff.fire", "p", bob.id().toString(), "_v", "adm_staff").kind());
+        // emblemes : refus d'une valeur inconnue, changement par l'admin, jamais par le patron
+        assertEquals("err", act(admin, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "dragon", "_v", "adm_companies").kind());
+        assertEquals("ok", act(admin, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "forgeron", "_v", "adm_companies").kind());
+        assertEquals("forgeron", eco.companies.get(admin, forge.id()).join().emblem());
+        assertEquals("err", act(alice, "adm.co.emblem", "id", Long.toString(forge.id()), "f_emblem", "aucun", "_v", "adm_companies").kind());
+        assertEquals("forgeron", eco.companies.get(admin, forge.id()).join().emblem());
+        // fiche du joueur en lecture seule : plus de saisie par le joueur
+        View mine = act(alice, "open", "to", "census");
+        assertTrue(mine.fields().isEmpty());
+        assertEquals("err", act(alice, "census.save", "f_first", "X", "f_last", "Y", "f_age", "20", "_v", "census").kind());
     }
 }

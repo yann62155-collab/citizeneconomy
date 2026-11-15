@@ -123,7 +123,7 @@ class FinalChecksTest {
             PlayerManager players = new PlayerManager(db);
             for (Actor a : List.of(admin, alice, bob)) players.touch(a).join();
             CompanyManager companies = new CompanyManager(db);
-            cid = companies.accept(admin, companies.submitRequest(alice, "Forge Royale", "Armes", "Forge", "marteau").join(), "bienvenue").join();
+            cid = companies.accept(admin, companies.submitRequest(alice, "Forge Royale", "Armes", "Forge", "forgeron").join(), "bienvenue").join();
             new EmployeeManager(db).hire(alice, cid, bob.id(), bob.name(), 50).join();
             BankManager bank = new BankManager(db);
             bank.deposit(alice, repeated, 700).join();
