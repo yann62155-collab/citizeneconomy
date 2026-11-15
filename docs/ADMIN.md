@@ -66,10 +66,10 @@ Le mod ouvre un site de gestion des entreprises, avec les mêmes écrans et les 
 **Sécurité** : sessions de 2 h, verrouillage 10 min après 5 échecs de connexion par adresse, aucune action n'est crue côté navigateur (le serveur revérifie droits et montants). Le site est en HTTP simple : le mot de passe circule en clair sauf si vous placez un reverse proxy HTTPS devant.
 
 ## Recensement des citoyens (`/recensement`)
-- Chaque joueur remplit sa fiche : prénom, nom, âge (`/recensement`, ou bouton « Recensement » du menu principal), puis la valide. Une fiche validée n'est plus modifiable par le joueur.
-- La profession est automatique : le secteur de son entreprise active (propriétaire, sinon gérant, sinon employé), « Sans emploi » sinon. Un admin peut fixer une profession à la main.
-- Tant que sa fiche n'est pas validée, le joueur reçoit un rappel cliquable à chaque connexion.
-- Administration : `/recensement admin`, bouton « Recensement » du menu d'administration, ou le panneau web du Conseil royal. On peut corriger, valider, rouvrir au joueur ou effacer une fiche. Chaque action est inscrite au journal et notifiée au joueur.
+- Réservé aux **employés de la couronne**, aux admins et au Conseil royal (voir « Personnel du royaume » plus bas). Les autres joueurs ne peuvent ni lancer `/recensement` ni remplir leur fiche : ils voient seulement leur fiche (bouton « Ma fiche de citoyen »).
+- La profession est automatique : le secteur de l'entreprise active du citoyen (propriétaire, sinon gérant, sinon employé), « Sans emploi » sinon. Un agent peut fixer une profession à la main.
+- Tant que sa fiche n'est pas validée, le joueur reçoit un rappel à chaque connexion l'invitant à se présenter à un employé de la couronne.
+- L'agent peut enregistrer, valider, rouvrir ou effacer une fiche. Chaque action est inscrite au journal et notifiée au joueur.
 - Les fiches sont affichées dans la liste Tab par le mod **Citizen Tab** (à la place du pseudo), via l'API `fr.citizen.economy.api.Recensement`.
 
 ## Personnel du royaume et recensement
