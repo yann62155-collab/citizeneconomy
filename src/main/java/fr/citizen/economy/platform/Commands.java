@@ -18,11 +18,16 @@ public final class Commands {
         root.then(open("create", "create", false));
         root.then(open("bank", "bank", false));
         root.then(open("announcements", "board", false));
+        root.then(open("recensement", "census", false));
         root.then(open("treasury", "treasury", true));
         root.then(open("admin", "admin", true));
         root.then(net.minecraft.commands.Commands.literal("web").executes(c -> web(c.getSource())));
         root.then(net.minecraft.commands.Commands.literal("help").executes(c -> help(c.getSource())));
         d.register(root);
+        // Raccourci du recensement des citoyens (aussi propose a la connexion tant que la fiche n'est pas validee)
+        d.register(net.minecraft.commands.Commands.literal("recensement")
+                .executes(c -> open(c.getSource(), "census"))
+                .then(open("admin", "adm_census", true)));
     }
 
     private static LiteralArgumentBuilder<CommandSourceStack> open(String name, String view, boolean adminOnly) {
@@ -74,6 +79,8 @@ public final class Commands {
                 "/ceconomy : menu principal (touche K)",
                 "/ceconomy bank : banque et monnaie",
                 "/ceconomy company : mes entreprises",
+                "/recensement : votre fiche de citoyen (prénom, nom, âge, profession)",
+                "/recensement admin : recensement de tous les citoyens (admin)",
                 "/ceconomy create : demander la création d'une entreprise",
                 "/ceconomy announcements : annonces publiques",
                 "/ceconomy web : code de connexion au panneau web des entreprises (patrons)",

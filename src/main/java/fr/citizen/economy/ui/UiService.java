@@ -90,7 +90,9 @@ public final class UiService {
             case "tax" -> vTax(a, args);
             case "ctax" -> vCompanyTax(a, args);
             case "notifs" -> vNotifs(a, args);
-            case "admin", "treasury", "adm_companies", "adm_requests", "adm_reqinfo", "adm_players", "adm_members", "adm_tax", "adm_tx",
+            case "census" -> vCensus(a, args);
+            case "adm_census", "adm_census_p",
+                 "admin", "treasury", "adm_companies", "adm_requests", "adm_reqinfo", "adm_players", "adm_members", "adm_tax", "adm_tx",
                  "adm_taxhist", "adm_ann", "adm_audit", "adm_settings", "adm_limits" -> vAdmin(a, id, args);
             default -> throw new EconomyException("BAD_VIEW", "Écran inconnu.");
         };
@@ -309,7 +311,7 @@ public final class UiService {
         b.button(ViewBuilder.nav("Banque", "bank")).button(ViewBuilder.nav("Mes entreprises", "companies"))
                 .button(ViewBuilder.nav("Annonces", "board")).button(ViewBuilder.nav("Mes factures", "invoices"))
                 .button(ViewBuilder.nav("Mes impôts", "tax")).button(ViewBuilder.nav("Notifications", "notifs"))
-                .button(ViewBuilder.nav("Créer une entreprise", "create"));
+                .button(ViewBuilder.nav("Créer une entreprise", "create")).button(ViewBuilder.nav("Recensement", "census"));
         if (a.admin()) b.button(ViewBuilder.nav("Administration", "admin")).button(ViewBuilder.nav("Trésorerie royale", "treasury"));
         return b;
     }
@@ -613,6 +615,85 @@ public final class UiService {
         return b;
     }
 
+    // ================================================================== recensement
+
+    private ViewBuilder vCensus(Actor a, Map<String, String> args) {
+        ViewBuilder b = vb("census", "Recensement du royaume", args);
+        Optional<CensusManager.Entry> cur = eco.census.get(a.id()).join();
+        CensusManager.Entry e = cur.orElse(null);
+        String auto = eco.census.autoProfession(a.id()).join();
+        String prof = e != null && !e.profession().isEmpty() ? e.profession() + " (fixée par l'administration)" : auto + " (selon votre entreprise)";
+        b.h("Fiche de citoyen");
+        b.n("Prénom : " + (e == null || e.firstName().isEmpty() ? "à remplir" : e.firstName()));
+        b.n("Nom : " + (e == null || e.lastName().isEmpty() ? "à remplir" : e.lastName()));
+        b.n("Âge : " + (e == null || e.age() <= 0 ? "à remplir" : e.age() + " ans"));
+        b.n("Profession : " + prof);
+        b.blank();
+        if (e != null && e.validated()) {
+            b.g("Recensement validé. Ces informations remplacent votre pseudo dans la liste des joueurs (Tab).");
+            b.m("Une erreur ? Seule l'administration peut modifier une fiche validée.");
+            b.button(ViewBuilder.nav("Retour", "main"));
+            return b;
+        }
+        b.m("Remplissez votre prénom, votre nom et votre âge, enregistrez, puis validez.");
+        b.m("La profession est celle de votre entreprise ; sans entreprise : « " + CensusManager.NO_JOB + " ».");
+        b.r("Une fois validé, le recensement ne peut plus être modifié que par l'administration.");
+        b.field("f_first", "Prénom", e == null ? "" : e.firstName(), CensusManager.MAX_NAME)
+                .field("f_last", "Nom de famille", e == null ? "" : e.lastName(), CensusManager.MAX_NAME)
+                .field("f_age", "Âge", e == null || e.age() <= 0 ? "" : Integer.toString(e.age()), 3);
+        b.button(ViewBuilder.nav("Retour", "main")).button(b.act("Enregistrer", "census.save"));
+        if (e != null && e.complete())
+            b.button(ViewBuilder.confirm(b.act("Valider", "census.validate"),
+                    "Valider « " + e.firstName() + " " + e.lastName() + ", " + e.age() + " ans » ? Vous ne pourrez plus le modifier."));
+        return b;
+    }
+
+    private ViewBuilder vAdmCensus(Actor a, Map<String, String> args) {
+        ViewBuilder b = vb("adm_census", "Recensement des citoyens", args);
+        List<CensusManager.Row> rows = eco.census.list(a, 150).join();
+        long done = rows.stream().filter(r -> r.entry() != null && r.entry().validated()).count();
+        long open = rows.stream().filter(r -> r.entry() != null && !r.entry().validated()).count();
+        b.g("Recensés (validés) : " + done + " · en cours : " + open + " · non recensés : " + (rows.size() - done - open));
+        if (rows.isEmpty()) b.m("Aucun joueur connu.");
+        for (CensusManager.Row r : rows) {
+            CensusManager.Entry e = r.entry();
+            Btn open1 = ViewBuilder.nav("Fiche", "adm_census_p", "p", r.player().toString());
+            if (e == null) { b.m(r.playerName() + " — non recensé", open1); continue; }
+            String txt = r.playerName() + " → " + (e.firstName() + " " + e.lastName()).trim() + ", " + (e.age() > 0 ? e.age() + " ans" : "âge ?")
+                    + (e.profession().isEmpty() ? "" : ", " + e.profession());
+            b.line(txt + (e.validated() ? "" : "  (non validé)"), e.validated() ? "n" : "r", open1);
+        }
+        b.button(ViewBuilder.nav("Retour", "admin"));
+        return b;
+    }
+
+    private ViewBuilder vAdmCensusPlayer(Actor a, Map<String, String> args) {
+        UUID pid = uuid(args, "p");
+        String pname = eco.players.findByUuid(pid).join().map(PlayerManager.PlayerRef::name).orElse(pid.toString());
+        ViewBuilder b = vb("adm_census_p", "Recensement — " + pname, args);
+        CensusManager.Entry e = eco.census.get(pid).join().orElse(null);
+        String auto = eco.census.autoProfession(pid).join();
+        b.h("Pseudo Minecraft : " + pname);
+        if (e == null) b.r("Ce joueur n'est pas encore recensé : vous pouvez remplir sa fiche.");
+        else {
+            b.n("Prénom : " + e.firstName() + " · Nom : " + e.lastName() + " · Âge : " + (e.age() > 0 ? e.age() + " ans" : "?"));
+            b.n("Profession affichée : " + (e.profession().isEmpty() ? auto + " (automatique)" : e.profession() + " (fixée)"));
+            if (e.validated()) b.g("Fiche validée (" + date(e.updatedAt()) + ")."); else b.r("Fiche non validée.");
+        }
+        b.m("Profession automatique (entreprise) : " + auto + ". Laissez le champ Profession vide pour la garder.");
+        b.field("f_first", "Prénom", e == null ? "" : e.firstName(), CensusManager.MAX_NAME)
+                .field("f_last", "Nom de famille", e == null ? "" : e.lastName(), CensusManager.MAX_NAME)
+                .field("f_age", "Âge", e == null || e.age() <= 0 ? "" : Integer.toString(e.age()), 3)
+                .field("f_prof", "Profession (vide = automatique)", e == null ? "" : e.profession(), CensusManager.MAX_PROFESSION);
+        b.button(ViewBuilder.nav("Retour", "adm_census")).button(b.act("Enregistrer", "adm.census.save"));
+        if (e != null) {
+            if (e.validated()) b.button(b.act("Rouvrir au joueur", "adm.census.unlock"));
+            else if (e.complete()) b.button(b.act("Valider", "adm.census.validate"));
+            b.button(ViewBuilder.confirm(b.act("Effacer", "adm.census.delete"), "Effacer le recensement de " + pname + " ?"));
+        }
+        return b;
+    }
+
     // ================================================================== ecrans administrateur
 
     private ViewBuilder vAdmin(Actor a, String id, Map<String, String> args) {
@@ -632,6 +713,8 @@ public final class UiService {
             case "adm_audit" -> vAdmAudit(a, args);
             case "adm_settings" -> vAdmSettings(a, args);
             case "adm_limits" -> vAdmLimits(a, args);
+            case "adm_census" -> vAdmCensus(a, args);
+            case "adm_census_p" -> vAdmCensusPlayer(a, args);
             default -> throw new EconomyException("BAD_VIEW", "Écran inconnu.");
         };
     }
@@ -648,7 +731,7 @@ public final class UiService {
         b.n("Argent en circulation : comptes personnels " + money(d.personalTotal()) + " · comptes professionnels " + money(d.businessTotal()));
         b.n("Factures ouvertes : " + d.openInvoices() + " · Annonces actives : " + d.activeAnnouncements());
         b.button(ViewBuilder.nav("Retour", "main")).button(ViewBuilder.nav("Entreprises", "adm_companies")).button(ViewBuilder.nav("Demandes", "adm_requests"))
-                .button(ViewBuilder.nav("Joueurs", "adm_players")).button(ViewBuilder.nav("Propriétaires", "adm_members", "role", "OWNER"))
+                .button(ViewBuilder.nav("Joueurs", "adm_players")).button(ViewBuilder.nav("Recensement", "adm_census")).button(ViewBuilder.nav("Propriétaires", "adm_members", "role", "OWNER"))
                 .button(ViewBuilder.nav("Gérants", "adm_members", "role", "MANAGER")).button(ViewBuilder.nav("Employés", "adm_members", "role", "EMPLOYEE"))
                 .button(ViewBuilder.nav("Taxes", "adm_tax")).button(ViewBuilder.nav("Trésorerie", "treasury")).button(ViewBuilder.nav("Hist. bancaire", "adm_tx"))
                 .button(ViewBuilder.nav("Hist. fiscal", "adm_taxhist")).button(ViewBuilder.nav("Annonces", "adm_ann"))
@@ -912,6 +995,12 @@ public final class UiService {
                 TxResult r = eco.bank.transfer(a, txId(a, g, action), to, amt, arg(g, "f_desc")).join();
                 yield r.replayed() ? "Virement déjà enregistré." : "Virement de " + money(amt) + " effectué.";
             }
+            case "census.save" -> { eco.census.fill(a, arg(g, "f_first"), arg(g, "f_last"), arg(g, "f_age")).join(); yield "Recensement enregistré. Vérifiez puis validez."; }
+            case "census.validate" -> { eco.census.validate(a).join(); yield "Recensement validé : bienvenue parmi les citoyens du royaume !"; }
+            case "adm.census.save" -> { eco.census.adminSet(a, uuid(g, "p"), arg(g, "f_first"), arg(g, "f_last"), arg(g, "f_age"), arg(g, "f_prof")).join(); yield "Fiche enregistrée."; }
+            case "adm.census.unlock" -> { eco.census.adminUnlock(a, uuid(g, "p")).join(); yield "Fiche rouverte : le joueur peut la corriger."; }
+            case "adm.census.validate" -> { eco.census.adminValidate(a, uuid(g, "p")).join(); yield "Fiche validée."; }
+            case "adm.census.delete" -> { eco.census.adminDelete(a, uuid(g, "p")).join(); yield "Recensement effacé."; }
             case "notif.readall" -> { eco.notifications.markAllRead(a.id()).join(); yield "Notifications marquées comme lues."; }
 
             // --- demandes de creation

@@ -30,6 +30,7 @@ public final class EconomyRuntime {
     private int ticks;
     private volatile boolean schedulerBusy;
     private volatile boolean notifyBusy;
+    private volatile boolean censusBusy;
 
     private EconomyRuntime(MinecraftServer server, Database db) {
         this.server = server;
@@ -90,6 +91,7 @@ public final class EconomyRuntime {
         current = null;
         if (rt == null) return;
         rt.web.stop();
+        fr.citizen.economy.api.Recensement.clear();
         rt.executor.shutdown();
         try { rt.executor.awaitTermination(10, TimeUnit.SECONDS); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
         rt.db.close();
@@ -106,6 +108,14 @@ public final class EconomyRuntime {
                 finally { schedulerBusy = false; }
             });
         }
+        if ((ticks == 20 || ticks % 100 == 50) && !censusBusy) { // recensement : toutes les 5 secondes
+            censusBusy = true;
+            executor.execute(() -> {
+                try { refreshCensus(); }
+                catch (Throwable t) { CitizenEconomy.LOGGER.error("Recensement", t); }
+                finally { censusBusy = false; }
+            });
+        }
         if (ticks % 100 == 0 && !notifyBusy) { // toutes les 5 secondes
             notifyBusy = true;
             executor.execute(() -> {
@@ -114,6 +124,21 @@ public final class EconomyRuntime {
                 finally { notifyBusy = false; }
             });
         }
+    }
+
+    /** Recopie le recensement dans l'API publique et rafraichit la liste Tab des joueurs dont la fiche a change. */
+    private void refreshCensus() {
+        java.util.Map<UUID, fr.citizen.economy.service.CensusManager.Card> cards = economy.census.cards().join();
+        java.util.Map<UUID, String[]> fresh = new java.util.HashMap<>();
+        cards.forEach((id, c) -> fresh.put(id, new String[]{c.firstName(), c.lastName(), Integer.toString(c.age()), c.profession(), c.validated() ? "1" : "0"}));
+        java.util.Set<UUID> changed = fr.citizen.economy.api.Recensement.replaceAll(fresh);
+        if (changed.isEmpty()) return;
+        server.execute(() -> {
+            for (UUID id : changed) {
+                ServerPlayer p = server.getPlayerList().getPlayer(id);
+                if (p != null) p.refreshTabListName();
+            }
+        });
     }
 
     private void deliverNotifications() {
@@ -134,9 +159,22 @@ public final class EconomyRuntime {
 
     public void onLogin(ServerPlayer player) {
         executor.execute(() -> {
-            try { economy.players.touch(Admins.actor(player)).join(); }
+            try {
+                economy.players.touch(Admins.actor(player)).join();
+                boolean validated = economy.census.get(player.getUUID()).join().map(e -> e.validated()).orElse(false);
+                if (!validated) server.execute(() -> remindCensus(player));
+            }
             catch (Throwable t) { CitizenEconomy.LOGGER.error("Enregistrement du joueur {}", player.getGameProfile().getName(), t); }
         });
+    }
+
+    private static void remindCensus(ServerPlayer player) {
+        player.sendSystemMessage(Component.literal("[Recensement] ").withStyle(net.minecraft.ChatFormatting.GOLD)
+                .append(Component.literal("Le royaume ne vous a pas encore recensé. ").withStyle(net.minecraft.ChatFormatting.YELLOW))
+                .append(Component.literal("[Se faire recenser]").withStyle(style -> style.withColor(net.minecraft.ChatFormatting.GOLD).withUnderlined(true)
+                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/recensement"))
+                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("Ouvre le recensement (ou tapez /recensement)"))))));
     }
 
     /** Ouvre un ecran pour un joueur (commandes, raccourci). */

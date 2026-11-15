@@ -14,3 +14,7 @@ Toutes les commandes ouvrent un écran ; chaque action de l'écran est revérifi
 | `/ceconomy help` | tous | Rappel des commandes |
 
 Les commandes `treasury` et `admin` n'apparaissent qu'aux administrateurs ; un non-administrateur qui forgerait la requête réseau est refusé par le serveur (testé).
+
+- `/recensement` : votre fiche de citoyen (prénom, nom, âge ; profession selon votre entreprise)
+- `/recensement admin` : recensement de tous les citoyens (admin)
+- `/ceconomy recensement` : même écran que `/recensement`

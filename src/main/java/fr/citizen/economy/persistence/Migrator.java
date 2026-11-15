@@ -21,7 +21,7 @@ import java.util.List;
 final class Migrator {
 
     /** Version N = element N-1. A completer a chaque evolution du schema. */
-    static final List<String> FILES = List.of("V1__init.sql", "V2__notification_delivery.sql", "V3__company_matricule.sql");
+    static final List<String> FILES = List.of("V1__init.sql", "V2__notification_delivery.sql", "V3__company_matricule.sql", "V4__census.sql");
 
     private Migrator() { }
 
