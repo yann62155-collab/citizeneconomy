@@ -793,7 +793,7 @@ public final class UiService {
         if (list.isEmpty()) b.m("Aucune entreprise.");
         if (!mode.equals("all")) b.field("f_reason", "Motif (obligatoire)", "", 120);
         else {
-            b.m("Emblème = code à 3 lettres lu par Citizen Métiers : " + Emblems.keys() + ". BAN et AUC = aucune restriction ; vide = détection d'après le secteur.");
+            b.m("Emblème = code à 3 lettres lu par Citizen Métiers : " + Emblems.keys() + ". HOP = médecins de l'hôpital (Citizen Médical). BAN et AUC = aucune restriction ; vide = détection d'après le secteur.");
             b.field("f_emblem", "Nouvel emblème (puis bouton « Emblème » de l'entreprise)", "", 40);
         }
         b.button(ViewBuilder.nav("Retour", "admin"));

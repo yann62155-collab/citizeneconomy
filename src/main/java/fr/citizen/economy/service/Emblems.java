@@ -18,6 +18,7 @@ public final class Emblems {
             new Emblem("TAV", "taverne", "Taverne", "toute la nourriture et les boissons"),
             new Emblem("POT", "potionniste", "Potionniste", "potions et totems"),
             new Emblem("POI", "poissonnier", "Poissonnier", "préparation du poisson"),
+            new Emblem("HOP", "hopital", "Hôpital", "soins des blessés réservés à ses membres (Citizen Médical)"),
             new Emblem("BAN", "banque", "Banque", "aucune restriction"),
             new Emblem("AUC", "aucun", "Aucun", "aucune restriction"));
 

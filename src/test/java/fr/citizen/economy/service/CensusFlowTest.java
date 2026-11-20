@@ -146,6 +146,7 @@ class CensusFlowTest {
         assertEquals("", Emblems.parse(""));
         assertEquals("FOR", Emblems.parse(" Forgeron "));
         assertEquals("RES", Emblems.parse("res")); assertEquals("RES", Emblems.parse("RESTAURANT"));
+        assertEquals("HOP", Emblems.parse("Hôpital")); assertEquals("HOP", Emblems.parse("hop"));
         assertThrows(EconomyException.class, () -> Emblems.parse("sorcier"));
         assertEquals("BAD_EMBLEM", code(() -> companies.submitRequest(smith, "Mauvais Embleme", "Description ok", "Forge", "sorcier").join()));
         long req = companies.submitRequest(smith, "Forge Royale", "Armes et armures", "Forgeron", "Forgeron").join();
