@@ -16,7 +16,8 @@ public final class WebPolicy {
 
     public static final String HOME = "companies";
 
-    static final Set<String> VIEWS = Set.of("companies", "company", "employees", "perms", "salaryhist", "cbank", "cboard", "cinvoices", "ctax");
+    static final Set<String> VIEWS = Set.of("companies", "company", "employees", "perms", "salaryhist", "cbank", "cboard", "cinvoices", "ctax",
+            "pos", "stock", "stock_item", "buyback", "sales", "sale", "acct", "acct_journal", "acct_manual");
 
     static final Set<String> ACTIONS = Set.of(
             "open",
@@ -24,7 +25,10 @@ public final class WebPolicy {
             "cbank.pay",
             "ann.publish", "ann.edit", "ann.delete",
             "inv.create", "inv.pay", "inv.refuse", "inv.cancel",
-            "tax.pay");
+            "tax.pay",
+            "pos.add", "pos.sub", "pos.del", "pos.clear", "pos.checkout",
+            "stock.create", "stock.update", "stock.toggle", "stock.restock", "stock.adjust", "stock.loss",
+            "buyback.price", "buyback.pay", "sale.cancel", "acct.manual", "acct.manual.del");
 
     /** Ecrans d'administration du royaume, reserves au Conseil royal. */
     static boolean adminView(String v) { return v.equals("admin") || v.equals("treasury") || v.startsWith("adm_"); }

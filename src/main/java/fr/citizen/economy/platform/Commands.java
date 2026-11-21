@@ -22,6 +22,7 @@ public final class Commands {
         root.then(open("treasury", "treasury", true));
         root.then(open("admin", "admin", true));
         root.then(net.minecraft.commands.Commands.literal("web").executes(c -> web(c.getSource())));
+        root.then(net.minecraft.commands.Commands.literal("discord").requires(Admins::is).executes(c -> discord(c.getSource())));
         root.then(net.minecraft.commands.Commands.literal("help").executes(c -> help(c.getSource())));
         d.register(root);
         // Recensement des citoyens : reserve aux employes de la couronne (et aux admins)
@@ -83,14 +84,27 @@ public final class Commands {
         }
         rt.executor().execute(() -> {
             boolean owner;
-            try { owner = rt.web().ownsCompany(p.getUUID()); } catch (RuntimeException e) { owner = false; }
+            try { owner = rt.web().canUsePortal(p.getUUID()); } catch (RuntimeException e) { owner = false; }
             final boolean ok = owner;
             p.server.execute(() -> {
-                if (!ok) { p.sendSystemMessage(Component.literal("Le panneau web est réservé aux patrons : vous ne détenez aucune entreprise.")); return; }
+                if (!ok) { p.sendSystemMessage(Component.literal("Le panneau web est réservé aux patrons, gérants et employés qui ont des droits de caisse, stock, comptabilité ou finances.")); return; }
                 String code = rt.web().codes().issue(p.getUUID(), p.getGameProfile().getName());
                 p.sendSystemMessage(Component.literal("Panneau des entreprises : " + EconomyRuntime.webUrl()));
                 p.sendSystemMessage(Component.literal("Votre code de connexion : " + code + " (valable 5 minutes, à usage unique)"));
             });
+        });
+        return 1;
+    }
+
+    private static int discord(CommandSourceStack src) {
+        EconomyRuntime rt = EconomyRuntime.current();
+        if (rt == null) { src.sendFailure(Component.literal("L'économie n'est pas disponible.")); return 0; }
+        src.sendSuccess(() -> Component.literal("Envoi des métiers à Discord en cours…").withStyle(ChatFormatting.GOLD), false);
+        rt.executor().execute(() -> {
+            String msg;
+            try { msg = rt.syncDiscordNow(); } catch (Throwable t) { msg = "Échec : " + t; }
+            final String m = msg;
+            src.getServer().execute(() -> src.sendSuccess(() -> Component.literal(m).withStyle(ChatFormatting.YELLOW), false));
         });
         return 1;
     }
@@ -103,8 +117,9 @@ public final class Commands {
                 "/recensement : recenser les citoyens (réservé aux employés de la couronne et aux admins)",
                 "/ceconomy create : demander la création d'une entreprise",
                 "/ceconomy announcements : annonces publiques",
-                "/ceconomy web : code de connexion au panneau web des entreprises (patrons)",
+                "/ceconomy web : code de connexion au panneau web (patrons, gérants, employés avec droits)",
                 "/ceconomy treasury : trésorerie royale (admin)",
+                "/ceconomy discord : envoyer maintenant les métiers au bot Discord (admin)",
                 "/ceconomy admin : administration (admin)",
         };
         for (String l : lines) src.sendSuccess(() -> Component.literal(l).withStyle(ChatFormatting.GOLD), false);

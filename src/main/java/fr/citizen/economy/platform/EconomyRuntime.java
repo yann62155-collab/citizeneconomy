@@ -44,6 +44,19 @@ public final class EconomyRuntime {
         });
         this.web = new fr.citizen.economy.web.WebPanel(ui, economy, new WebConfig(), new fr.citizen.economy.web.LoginCodes(System::currentTimeMillis),
                 executor, System::currentTimeMillis, CitizenEconomy.LOGGER::info);
+        this.discord = new DiscordLinks(economy, DiscordApiFacade.reflective());
+        this.web.setDiscord(new fr.citizen.economy.web.DiscordOAuth(new WebConfig()), discord);
+    }
+
+    private final DiscordLinks discord;
+    private volatile boolean discordBusy;
+
+    public DiscordLinks discord() { return discord; }
+
+    /** Envoie les metiers au bot Discord (thread de travail). Renvoie un message lisible. */
+    public String syncDiscordNow() {
+        DiscordLinks.SyncResult r = discord.syncJobs();
+        return r.skipped() ? r.reason() : "Métiers envoyés à Discord : " + r.members() + " compte(s) vérifié(s), " + r.changes() + " rôle(s) modifié(s).";
     }
 
     /** Reglages web lus dans la configuration serveur (valeurs par defaut si elle n'est pas encore chargee). */
@@ -52,6 +65,17 @@ public final class EconomyRuntime {
         public int port() { try { return Config.WEB_PORT.get(); } catch (IllegalStateException e) { return 30039; } }
         public String bindAddress() { try { return Config.WEB_BIND.get(); } catch (IllegalStateException e) { return "0.0.0.0"; } }
         public String councilPassword() { try { return Config.WEB_COUNCIL_PASSWORD.get(); } catch (IllegalStateException e) { return "2007"; } }
+        public boolean discordEnabled() { return !discordClientId().isBlank() && !discordClientSecret().isBlank(); }
+        public String discordClientId() { try { return Config.DISCORD_CLIENT_ID.get().trim(); } catch (IllegalStateException e) { return ""; } }
+        public String discordClientSecret() { try { return Config.DISCORD_CLIENT_SECRET.get().trim(); } catch (IllegalStateException e) { return ""; } }
+        public String discordRedirectUri() {
+            try {
+                String v = Config.DISCORD_REDIRECT_URI.get().trim();
+                if (!v.isEmpty()) return v;
+            } catch (IllegalStateException ignored) { }
+            String base = webUrl();
+            return (base.endsWith("/") ? base.substring(0, base.length() - 1) : base) + "/auth/discord/callback";
+        }
     }
 
     public fr.citizen.economy.web.WebPanel web() { return web; }
@@ -106,6 +130,16 @@ public final class EconomyRuntime {
                 try { economy.scheduler.tick(); }
                 catch (Throwable t) { CitizenEconomy.LOGGER.error("Planificateur économique", t); }
                 finally { schedulerBusy = false; }
+            });
+        }
+        int syncMin;
+        try { syncMin = Config.DISCORD_SYNC_MINUTES.get(); } catch (IllegalStateException e) { syncMin = 0; }
+        if (syncMin > 0 && (ticks == 2400 || ticks % (1200L * syncMin) == 0) && !discordBusy && discord.available()) { // 2 min apres le demarrage, puis periodiquement
+            discordBusy = true;
+            executor.execute(() -> {
+                try { String m = syncDiscordNow(); if (!m.startsWith("Les rôles") && !m.startsWith("Le bot") && !m.startsWith("Citizen Discord")) CitizenEconomy.LOGGER.info(m); }
+                catch (Throwable t) { CitizenEconomy.LOGGER.warn("Envoi des métiers à Discord : {}", t.toString()); }
+                finally { discordBusy = false; }
             });
         }
         if ((ticks == 20 || ticks % 100 == 50) && !censusBusy) { // recensement : toutes les 5 secondes

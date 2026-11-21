@@ -387,4 +387,88 @@ class UiServiceTest {
         assertTrue(mine.fields().isEmpty());
         assertEquals("err", act(alice, "census.save", "f_first", "X", "f_last", "Y", "f_age", "20", "_v", "census").kind());
     }
+
+    @Test
+    void cashRegisterStockAndAccountingThroughTheScreens() {
+        act(alice, "req.submit", "f_name", "Boulangerie", "f_desc", "Pain et gateaux", "f_sector", "Taverne", "f_emblem", "", "_v", "create");
+        long rid = eco.companies.pendingRequests(admin).join().get(0).id();
+        act(admin, "adm.req.accept", "r", Long.toString(rid), "f_note", "ok", "_v", "adm_requests");
+        Company shop = eco.companies.companiesOf(alice.id()).join().get(0);
+        String id = Long.toString(shop.id());
+        // la fiche entreprise propose caisse, stock et comptabilite au patron
+        View company = act(alice, "open", "to", "company", "id", id);
+        assertTrue(company.buttons().stream().anyMatch(b -> b.label().equals("Caisse")));
+        assertTrue(company.buttons().stream().anyMatch(b -> b.label().equals("Comptabilité")));
+        // un employe sans droit n'a ni caisse ni stock
+        assertEquals("ok", act(alice, "emp.hire", "f_player", "Bob", "f_salary", "0", "_v", "employees", "id", id).kind());
+        assertEquals("err", act(bob, "open", "to", "pos", "id", id).kind());
+        // creation d'un produit par ecran
+        assertEquals("ok", act(alice, "stock.create", "f_sku", "PAIN", "f_name", "Pain", "f_price", "5", "f_cost", "2", "f_qty", "10", "f_min", "3", "_v", "stock", "id", id).kind());
+        assertEquals("err", act(alice, "stock.create", "f_sku", "PAIN", "f_name", "Doublon", "f_price", "5", "f_cost", "2", "f_qty", "1", "f_min", "0", "_v", "stock", "id", id).kind());
+        long pain = eco.stock.list(alice, shop.id(), false).join().get(0).id();
+        String pr = Long.toString(pain);
+        // panier : on ne peut pas depasser le stock
+        assertNotEquals("err", act(alice, "pos.add", "pr", pr, "q", "4", "_v", "pos", "id", id).kind());
+        assertEquals("err", act(alice, "pos.add", "pr", pr, "q", "7", "_v", "pos", "id", id).kind());
+        assertTrue(text(act(alice, "open", "to", "pos", "id", id)).contains("4 × Pain = 20 PO"));
+        assertNotEquals("err", act(alice, "pos.sub", "pr", pr, "_v", "pos", "id", id).kind());
+        // vente au comptoir
+        View sold = act(alice, "pos.checkout", "f_customer", "", "_v", "pos", "id", id);
+        assertEquals("ok", sold.kind(), sold.message());
+        assertTrue(sold.message().contains("encaissée : 15 PO"), sold.message());
+        assertEquals(7, eco.stock.get(alice, pain).join().stock());
+        assertEquals("err", act(alice, "pos.checkout", "f_customer", "", "_v", "pos", "id", id).kind()); // panier vide
+        // vente facturee a Bob par pseudo, puis paiement
+        cash.set(bob.id(), 100);
+        act(bob, "bank.deposit", "f_amount", "50", "_n", "n9", "_v", "bank");
+        act(alice, "pos.add", "pr", pr, "q", "2", "_v", "pos", "id", id);
+        View billed = act(alice, "pos.checkout", "f_customer", "Bob", "_v", "pos", "id", id);
+        assertEquals("ok", billed.kind(), billed.message());
+        assertEquals(5, eco.stock.get(alice, pain).join().stock());
+        long inv = eco.invoices.issuedByCompany(alice, shop.id(), null, 5).join().get(0).id();
+        assertEquals("ok", act(bob, "inv.pay", "i", Long.toString(inv), "_v", "invoices").kind());
+        // ecrans de lecture
+        String sales = text(act(alice, "open", "to", "sales", "id", id));
+        assertTrue(sales.contains("V-000001") && sales.contains("V-000002") && sales.contains("Payée"), sales);
+        String acct = text(act(alice, "open", "to", "acct", "id", id, "per", "all"));
+        assertTrue(acct.contains("Ventes (2) : 25 PO"), acct);
+        assertTrue(acct.contains("Résultat : 15 PO"), acct); // 25 de ventes - 5 pains x 2 PO de cout
+        assertNotEquals("err", act(alice, "open", "to", "acct_journal", "id", id, "per", "all").kind());
+        assertEquals("ok", act(alice, "acct.manual", "kind", "expense", "f_cat", "Loyer", "f_label", "Loyer de la semaine", "f_amount", "5", "_v", "acct_manual", "id", id).kind());
+        // le patron remet la vente au comptoir en stock, Bob (sans droit) ne le peut pas
+        long cashSale = eco.sales.list(alice, shop.id(), null, 5, 0).join().stream().filter(x -> x.payment().equals("CASH")).findFirst().orElseThrow().id();
+        assertEquals("err", act(bob, "sale.cancel", "s", Long.toString(cashSale), "_v", "sales", "id", id).kind());
+        assertEquals("ok", act(alice, "sale.cancel", "s", Long.toString(cashSale), "_v", "sales", "id", id).kind());
+        assertEquals(8, eco.stock.get(alice, pain).join().stock());
+    }
+
+    @Test
+    void oreBuybackAndMarginThroughTheScreens() {
+        act(alice, "req.submit", "f_name", "Forge du Nord", "f_desc", "Armes et armures", "f_sector", "Forge", "f_emblem", "", "_v", "create");
+        long rid = eco.companies.pendingRequests(admin).join().get(0).id();
+        act(admin, "adm.req.accept", "r", Long.toString(rid), "f_note", "ok", "_v", "adm_requests");
+        Company forge = eco.companies.companiesOf(alice.id()).join().get(0);
+        String id = Long.toString(forge.id());
+        eco.bank.deposit(alice, UUID.randomUUID(), 1000).join();
+        eco.bank.businessDeposit(alice, forge.id(), UUID.randomUUID(), 600).join();
+        // article cree avec une marge de 50 % et un tarif de rachat de 4 PO
+        assertEquals("ok", act(alice, "stock.create", "f_sku", "FER", "f_name", "Minerai de fer", "f_price", "", "f_cost", "4", "f_margin", "50", "f_buy", "4", "f_qty", "0", "f_min", "0", "_v", "stock", "id", id).kind());
+        StockManager.Product fer = eco.stock.list(alice, forge.id(), false).join().get(0);
+        assertEquals(6, fer.price());
+        assertEquals("err", act(alice, "stock.create", "f_name", "Mauvaise marge", "f_price", "1", "f_cost", "1", "f_margin", "abc", "_v", "stock", "id", id).kind());
+        // ecran de rachat : choisir l'article, payer Bob
+        String pr = Long.toString(fer.id());
+        assertTrue(text(act(alice, "open", "to", "buyback", "id", id, "pr", pr)).contains("rachat 4 PO l'unité"));
+        View paid = act(alice, "buyback.pay", "f_seller", "Bob", "f_qty", "25", "pr", pr, "_v", "buyback", "id", id);
+        assertEquals("ok", paid.kind(), paid.message());
+        assertTrue(paid.message().contains("R-000001") && paid.message().contains("100 PO"), paid.message());
+        assertEquals(100, eco.bank.personalBalance(bob).join());
+        assertEquals(25, eco.stock.get(alice, fer.id()).join().stock());
+        assertTrue(text(act(alice, "open", "to", "buyback", "id", id)).contains("R-000001"));
+        // le tarif se change a l'ecran, un employe sans droit ne peut rien
+        assertEquals("ok", act(alice, "buyback.price", "f_buy", "5", "pr", pr, "_v", "buyback", "id", id).kind());
+        assertEquals(5, eco.stock.get(alice, fer.id()).join().buyback());
+        assertEquals("err", act(bob, "buyback.pay", "f_seller", "Bob", "f_qty", "1", "pr", pr, "_v", "buyback", "id", id).kind());
+        assertTrue(text(act(alice, "open", "to", "acct", "id", id, "per", "all")).contains("rachats de marchandise aux joueurs : 100 PO"));
+    }
 }

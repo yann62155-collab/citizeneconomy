@@ -201,6 +201,30 @@ public final class CompanyManager {
                 + "WHERE player_uuid = ? AND fired_at IS NULL) AND status IN ('ACTIVE','SUSPENDED') ORDER BY name", Records.COMPANY, player));
     }
 
+    /**
+     * Acces au portail web : patron, gerant, ou employe a qui l'on a donne au moins un droit de travail (caisse, stock, compta,
+     * factures...). Un simple employe qui ne peut que publier des annonces n'a pas besoin du portail.
+     */
+    public CompletableFuture<Boolean> hasPortalAccess(UUID player) {
+        return db.read(c -> Sql.exists(c, "SELECT 1 FROM employees e JOIN companies co ON co.id = e.company_id WHERE e.player_uuid = ? AND e.fired_at IS NULL "
+                + "AND co.status IN ('ACTIVE','SUSPENDED') AND (e.role IN ('OWNER','MANAGER') OR (e.permissions & ?) <> 0)",
+                player, PermissionManager.ALL & ~Permission.PUBLISH_ANNOUNCEMENTS.bit()));
+    }
+
+    /** Metiers de chaque joueur (entreprises actives dont il est membre, d'apres l'emblème). Sert aux roles Discord. */
+    public CompletableFuture<java.util.Map<UUID, java.util.Set<String>>> jobsByPlayer() {
+        return db.read(c -> {
+            java.util.Map<UUID, java.util.Set<String>> out = new java.util.HashMap<>();
+            Sql.query(c, "SELECT e.player_uuid, co.emblem FROM employees e JOIN companies co ON co.id = e.company_id "
+                    + "WHERE e.fired_at IS NULL AND co.status = 'ACTIVE' AND co.emblem IS NOT NULL AND co.emblem <> ''", rs -> {
+                String job = Emblems.jobOf(rs.getString(2));
+                if (job != null) out.computeIfAbsent(UUID.fromString(rs.getString(1)), k -> new java.util.TreeSet<>()).add(job);
+                return 0;
+            });
+            return out;
+        });
+    }
+
     public CompletableFuture<List<Company>> listAll(Actor admin) {
         return db.read(c -> {
             if (!admin.isCouncil()) PermissionManager.requireAdmin(admin);

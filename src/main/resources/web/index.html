@@ -57,18 +57,26 @@ function loginScreen(msg) {
   card.append(el('h2', '', 'Connexion'));
   if (msg) card.append(el('div', 'msg err', msg));
   const tabs = el('div', 'tabs');
-  const bOwner = el('button', 'on', 'Patron'), bCouncil = el('button', '', 'Conseil royal');
+  const bOwner = el('button', 'on', 'Équipe'), bCouncil = el('button', '', 'Conseil royal');
   tabs.append(bOwner, bCouncil);
   const form = el('div');
   function showOwner() {
     bOwner.className = 'on'; bCouncil.className = '';
     form.replaceChildren();
-    form.append(el('div', 'hint', 'En jeu, tapez /ceconomy web : vous recevez un code à 8 chiffres valable 5 minutes. Réservé aux joueurs qui détiennent une entreprise ; vous gérez toutes les entreprises que vous possédez.'));
+    form.append(el('div', 'hint', 'En jeu, tapez /ceconomy web : vous recevez un code à 8 chiffres valable 5 minutes. Réservé aux patrons, gérants et employés qui ont des droits de caisse, stock, comptabilité ou finances.'));
     const l = el('label', '', 'Code de connexion'); const i = el('input'); i.inputMode = 'numeric'; i.maxLength = 8; i.autocomplete = 'one-time-code';
     const go = el('button', '', 'Se connecter');
     const run = async () => { const r = await api('/api/login', {code: i.value.trim()}); r.status === 200 ? start() : loginScreen(r.data.error || 'Connexion impossible.'); };
     go.onclick = run; i.onkeydown = e => { if (e.key === 'Enter') run(); };
-    form.append(l, i, el('div', 'bar'), go); i.focus();
+    form.append(l, i, el('div', 'bar'), go);
+    api('/api/info').then(r => {
+      if (r.status === 200 && r.data.discord && bOwner.className === 'on') {
+        const d = el('button', '', 'Se connecter avec Discord');
+        d.onclick = () => { location.href = '/auth/discord'; };
+        form.append(el('div', 'hint', 'Ou, si votre compte Discord est relié avec /pseudo :'), d);
+      }
+    });
+    i.focus();
   }
   function showCouncil() {
     bOwner.className = ''; bCouncil.className = 'on';

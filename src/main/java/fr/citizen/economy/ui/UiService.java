@@ -20,7 +20,7 @@ import java.util.function.LongSupplier;
  * metier qui revalident permissions, soldes et montants. Appeler depuis un thread de travail (appels bloquants).
  */
 public final class UiService {
-    private static final Set<String> KEEP = Set.of("id", "p", "a", "i", "d", "r", "mode", "role");
+    private static final Set<String> KEEP = Set.of("id", "p", "a", "i", "d", "r", "mode", "role", "pr", "s", "per");
     private static final long DAY = 86_400_000L;
     private static final int LIST = 25;
 
@@ -90,6 +90,15 @@ public final class UiService {
             case "tax" -> vTax(a, args);
             case "ctax" -> vCompanyTax(a, args);
             case "notifs" -> vNotifs(a, args);
+            case "pos" -> vPos(a, args);
+            case "stock" -> vStock(a, args);
+            case "stock_item" -> vStockItem(a, args);
+            case "sales" -> vSales(a, args);
+            case "buyback" -> vBuyback(a, args);
+            case "sale" -> vSale(a, args);
+            case "acct" -> vAcct(a, args);
+            case "acct_journal" -> vAcctJournal(a, args);
+            case "acct_manual" -> vAcctManual(a, args);
             case "census" -> vCensus(a, args);
             case "adm_census" -> vAdmCensus(a, args);
             case "adm_census_p" -> vAdmCensusPlayer(a, args);
@@ -154,6 +163,7 @@ public final class UiService {
             case MANAGE_PERMISSIONS -> "Gérer les permissions"; case MANAGE_FINANCES -> "Gérer les finances";
             case MANAGE_ANNOUNCEMENTS -> "Gérer toutes les annonces"; case PUBLISH_ANNOUNCEMENTS -> "Publier des annonces";
             case VIEW_FINANCES -> "Voir les finances"; case ISSUE_INVOICES -> "Émettre des factures";
+            case CASHIER -> "Tenir la caisse"; case MANAGE_STOCK -> "Gérer le stock"; case VIEW_ACCOUNTING -> "Comptabilité";
         };
     }
 
@@ -387,6 +397,9 @@ public final class UiService {
         b.button(ViewBuilder.nav("Retour", "companies")).button(ViewBuilder.nav("Employés", "employees", "id", ids))
                 .button(ViewBuilder.nav("Annonces", "cboard", "id", ids)).button(ViewBuilder.nav("Factures", "cinvoices", "id", ids));
         if (can(a, me, Permission.VIEW_FINANCES)) b.button(ViewBuilder.nav("Finances", "cbank", "id", ids)).button(ViewBuilder.nav("Impôts", "ctax", "id", ids));
+        if (can(a, me, Permission.CASHIER) || canRead(a, me)) b.button(ViewBuilder.nav("Caisse", "pos", "id", ids)).button(ViewBuilder.nav("Stock", "stock", "id", ids));
+        if (can(a, me, Permission.VIEW_ACCOUNTING)) b.button(ViewBuilder.nav("Comptabilité", "acct", "id", ids));
+        if (can(a, me, Permission.MANAGE_STOCK)) b.button(ViewBuilder.nav("Rachat de minerais", "buyback", "id", ids));
         return b;
     }
 
@@ -998,12 +1011,396 @@ public final class UiService {
         return b;
     }
 
+    // ================================================================== caisse, stock, comptabilite
+
+    private final Map<String, Map<Long, Long>> carts = new ConcurrentHashMap<>();
+
+    private Map<Long, Long> cart(Actor a, long cid) {
+        if (carts.size() > 500) carts.clear(); // garde-fou memoire : un panier perdu se refait en quelques secondes
+        return carts.computeIfAbsent(a.id() + ":" + cid, k -> Collections.synchronizedMap(new LinkedHashMap<>()));
+    }
+
+    private static boolean canRead(Actor a, Member me) {
+        return can(a, me, Permission.CASHIER) || can(a, me, Permission.MANAGE_STOCK) || can(a, me, Permission.VIEW_ACCOUNTING);
+    }
+
+    /** « 25 », « 12,5 » ou « 25 % » -> points de base ; vide = -1 (prix fixe). */
+    private static long marginBp(String s) {
+        String t = s == null ? "" : s.replace("%", "").replace(',', '.').replaceAll("[\\s\\u00a0]", "");
+        if (t.isEmpty()) return -1;
+        if (!t.matches("\\d{1,5}(\\.\\d{1,2})?")) throw new EconomyException("BAD_ARG", "Marge : un pourcentage est attendu (ex : 25 ou 12,5).");
+        return Math.round(Double.parseDouble(t) * 100);
+    }
+
+    private static String marginText(long bp) { return bp < 0 ? "" : pct((int) bp).replace(" %", "").replace(",00", ""); }
+
+    private static long qty(String s, String name, boolean allowZero) {
+        String t = s == null ? "" : s.trim();
+        if (t.isEmpty() && allowZero) return 0;
+        if (!t.matches("\\d{1,7}")) throw new EconomyException("BAD_ARG", name + " : nombre entier attendu.");
+        long v = Long.parseLong(t);
+        if (v == 0 && !allowZero) throw new EconomyException("BAD_ARG", name + " : doit être supérieur à 0.");
+        return v;
+    }
+
+    private ViewBuilder vPos(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        Company c = eco.companies.get(a, cid).join();
+        Member me = self(a, cid);
+        ViewBuilder b = vb("pos", "Caisse — " + c.name(), args);
+        if (!can(a, me, Permission.CASHIER)) b.r("Vous n'avez pas le droit de tenir la caisse (lecture seule).");
+        List<StockManager.Product> products = eco.stock.list(a, cid, false).join();
+        Map<Long, StockManager.Product> byId = new HashMap<>();
+        for (StockManager.Product p : products) byId.put(p.id(), p);
+        Map<Long, Long> cart = cart(a, cid);
+        long total = 0;
+        b.h("Panier");
+        List<Map.Entry<Long, Long>> entries;
+        synchronized (cart) { entries = new ArrayList<>(cart.entrySet()); }
+        if (entries.isEmpty()) b.m("Panier vide : touchez un produit ci-dessous.");
+        for (Map.Entry<Long, Long> e : entries) {
+            StockManager.Product p = byId.get(e.getKey());
+            if (p == null) continue;
+            long line = e.getValue() * p.price();
+            total += line;
+            String pr = Long.toString(p.id());
+            b.n(e.getValue() + " × " + p.name() + " = " + money(line), b.act("−1", "pos.sub", "pr", pr), b.act("Retirer", "pos.del", "pr", pr));
+        }
+        b.g("Total : " + money(total));
+        if (can(a, me, Permission.CASHIER)) {
+            b.field("f_customer", hibou.available() ? "Client : n° de hibou ou @matricule (vide = vente au comptoir)" : "Client : pseudo ou @matricule (vide = vente au comptoir)", "", 32);
+            b.m("Vente au comptoir : encaissée tout de suite. Avec un client : une facture lui est envoyée, le stock est réservé et revient si elle est refusée.");
+        }
+        b.h("Produits");
+        if (products.isEmpty()) b.m("Aucun produit : créez-en dans Stock.");
+        int shown = 0;
+        for (StockManager.Product p : products) {
+            if (shown++ >= 90) { b.m("… liste tronquée : utilisez le stock pour désactiver les produits inutiles."); break; }
+            String pr = Long.toString(p.id());
+            String label = p.name() + " — " + money(p.price()) + " · stock " + p.stock() + (p.low() ? " (bas)" : "");
+            if (p.stock() <= 0 || !can(a, me, Permission.CASHIER)) b.line(label + (p.stock() <= 0 ? " · épuisé" : ""), p.stock() <= 0 ? "r" : "n");
+            else b.line(label, p.low() ? "r" : "n", b.act("+1", "pos.add", "pr", pr, "q", "1"), b.act("+5", "pos.add", "pr", pr, "q", "5"));
+        }
+        b.button(ViewBuilder.nav("Retour", "company", "id", Long.toString(cid)));
+        if (can(a, me, Permission.CASHIER)) b.button(b.act("Encaisser", "pos.checkout")).button(ViewBuilder.confirm(b.act("Vider le panier", "pos.clear"), "Vider le panier ?"));
+        b.button(ViewBuilder.nav("Ventes", "sales", "id", Long.toString(cid)));
+        if (can(a, me, Permission.MANAGE_STOCK) || canRead(a, me)) b.button(ViewBuilder.nav("Stock", "stock", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private ViewBuilder vStock(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        Company c = eco.companies.get(a, cid).join();
+        Member me = self(a, cid);
+        ViewBuilder b = vb("stock", "Stock — " + c.name(), args);
+        List<StockManager.Product> products = eco.stock.list(a, cid, true).join();
+        long value = 0; int low = 0;
+        for (StockManager.Product p : products) { if (p.active()) { value += p.value(); if (p.low()) low++; } }
+        b.g(products.size() + " produit(s) · valeur du stock : " + money(value) + (low > 0 ? " · " + low + " en alerte" : ""));
+        if (products.isEmpty()) b.m("Aucun produit.");
+        int shown = 0;
+        for (StockManager.Product p : products) {
+            if (shown++ >= 120) { b.m("… liste tronquée."); break; }
+            b.line((p.low() && p.active() ? "[BAS] " : "") + p.name() + " (" + p.sku() + ") — prix " + money(p.price()) + " · coût " + money(p.cost()) + " · stock " + p.stock()
+                            + (p.minStock() > 0 ? " (seuil " + p.minStock() + ")" : "") + (p.active() ? "" : " · retiré de la vente"),
+                    !p.active() ? "m" : p.low() ? "r" : "n", ViewBuilder.nav("Gérer", "stock_item", "id", Long.toString(cid), "pr", Long.toString(p.id())));
+        }
+        if (can(a, me, Permission.MANAGE_STOCK)) {
+            b.h("Nouveau produit");
+            b.field("f_sku", "Référence (facultatif)", "", 16).field("f_name", "Nom", "", 40).field("f_price", "Prix de vente (PO)", "", 12)
+                    .field("f_cost", "Coût d'achat unitaire (PO)", "", 12).field("f_margin", "Marge en % sur le coût (vide = prix fixe saisi ci-dessus)", "", 7)
+                    .field("f_buy", "Prix de rachat aux joueurs, PO par unité (0 = pas de rachat)", "", 12).field("f_qty", "Quantité en stock", "", 7).field("f_min", "Seuil d'alerte", "", 7);
+            b.button(b.act("Créer le produit", "stock.create"));
+        }
+        b.button(ViewBuilder.nav("Retour", "company", "id", Long.toString(cid))).button(ViewBuilder.nav("Caisse", "pos", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private ViewBuilder vStockItem(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        long pid = lng(args, "pr");
+        Member me = self(a, cid);
+        StockManager.Product p = eco.stock.get(a, pid).join();
+        if (p.companyId() != cid) throw new EconomyException("NOT_FOUND", "Produit introuvable.");
+        ViewBuilder b = vb("stock_item", p.name(), args);
+        b.g(p.name() + " (" + p.sku() + ")" + (p.active() ? "" : " — retiré de la vente"));
+        b.n("Prix de vente " + money(p.price()) + " · coût moyen " + money(p.cost()) + " · marge " + money(p.price() - p.cost())
+                + (p.marginBp() >= 0 ? " (fixée à " + marginText(p.marginBp()) + " % : le prix suit le coût)" : " (prix fixe)"));
+        b.n(p.buyback() > 0 ? "Rachat aux joueurs : " + money(p.buyback()) + " l'unité" : "Pas de rachat aux joueurs.");
+        b.n("Stock : " + p.stock() + " · valeur " + money(p.value()) + (p.minStock() > 0 ? " · seuil d'alerte " + p.minStock() : ""));
+        b.h("Derniers mouvements");
+        List<StockManager.Movement> mv = eco.stock.movements(a, pid, 12).join();
+        if (mv.isEmpty()) b.m("Aucun mouvement.");
+        for (StockManager.Movement m : mv)
+            b.m(date(m.createdAt()) + " " + moveFr(m.reason()) + " " + (m.delta() > 0 ? "+" : "") + m.delta() + (m.actor().isEmpty() ? "" : " · " + m.actor()) + (m.note().isEmpty() ? "" : " · " + clip(m.note(), 30)));
+        if (can(a, me, Permission.MANAGE_STOCK)) {
+            b.field("f_name", "Nom", p.name(), 40).field("f_price", "Prix de vente fixe (PO), ignoré si une marge est indiquée", Long.toString(p.price()), 12)
+                    .field("f_margin", "Marge en % sur le coût (vide = prix fixe)", marginText(p.marginBp()), 7).field("f_buy", "Prix de rachat aux joueurs, PO par unité (0 = pas de rachat)", Long.toString(p.buyback()), 12)
+                    .field("f_min", "Seuil d'alerte", Long.toString(p.minStock()), 7)
+                    .field("f_qty", "Quantité (réappro, perte, ou nouvel inventaire)", "", 7).field("f_cost", "Coût d'achat unitaire du réappro (vide = coût actuel)", "", 12).field("f_note", "Note", "", 60);
+            b.button(b.act("Enregistrer la fiche", "stock.update")).button(b.act("Réapprovisionner", "stock.restock"))
+                    .button(b.act("Inventaire (fixer le stock)", "stock.adjust")).button(ViewBuilder.confirm(b.act("Perte / casse", "stock.loss"), "Retirer cette quantité du stock sans vente ?"))
+                    .button(b.act(p.active() ? "Retirer de la vente" : "Remettre en vente", "stock.toggle"));
+        }
+        b.button(ViewBuilder.nav("Retour", "stock", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private static String moveFr(String r) {
+        return switch (r) {
+            case "RESTOCK" -> "Entrée"; case "SALE" -> "Vente"; case "RETURN" -> "Retour"; case "ADJUST" -> "Inventaire"; case "LOSS" -> "Perte"; default -> r;
+        };
+    }
+
+    private ViewBuilder vBuyback(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        Company c = eco.companies.get(a, cid).join();
+        Member me = self(a, cid);
+        ViewBuilder b = vb("buyback", "Rachat de minerais — " + c.name(), args);
+        b.m("Le patron fixe le prix de rachat de chaque article. Le rachat paie le joueur depuis la banque de l'entreprise, fait entrer le stock au prix de rachat et garde une facture de rachat.");
+        List<StockManager.Product> products = eco.stock.list(a, cid, false).join();
+        String sel = args.get("pr");
+        StockManager.Product chosen = null;
+        b.h("Articles");
+        if (products.isEmpty()) b.m("Aucun article : créez-les dans Stock.");
+        for (StockManager.Product p : products) {
+            if (sel != null && sel.equals(Long.toString(p.id()))) chosen = p;
+            List<Btn> btns = new ArrayList<>();
+            btns.add(ViewBuilder.nav("Choisir", "buyback", "id", Long.toString(cid), "pr", Long.toString(p.id())));
+            b.line(p.name() + " — " + (p.buyback() > 0 ? "rachat " + money(p.buyback()) + " l'unité" : "pas de rachat") + " · coût moyen " + money(p.cost()) + " · prix de vente " + money(p.price())
+                    + (p.marginBp() >= 0 ? " (marge " + marginText(p.marginBp()) + " %)" : "") + " · stock " + p.stock(), p.buyback() > 0 ? "n" : "m", btns.toArray(new Btn[0]));
+        }
+        if (chosen != null) {
+            b.h("Article choisi : " + chosen.name());
+            if (can(a, me, Permission.MANAGE_STOCK)) {
+                b.field("f_buy", "Tarif de rachat, PO par unité (0 = arrêter le rachat)", Long.toString(chosen.buyback()), 12);
+                b.field("f_seller", hibou.available() ? "Vendeur : n° de hibou" : "Vendeur : pseudo", "", 32).field("f_qty", "Quantité apportée", "", 7);
+                b.button(b.act("Fixer le tarif", "buyback.price", "pr", Long.toString(chosen.id()))).button(ViewBuilder.confirm(b.act("Payer le vendeur", "buyback.pay", "pr", Long.toString(chosen.id())), "Payer le vendeur depuis la banque de l'entreprise ?"));
+            } else b.m("Vous pouvez consulter, mais le droit « Gérer le stock » est nécessaire pour racheter.");
+        }
+        b.h("Dernières factures de rachat");
+        List<BuybackManager.Buyback> list = eco.buybacks.list(a, cid, 15).join();
+        if (list.isEmpty()) b.m("Aucun rachat.");
+        for (BuybackManager.Buyback r : list) b.n(r.number() + " · " + date(r.createdAt()) + " · " + r.seller() + " · " + r.qty() + " × " + r.productName() + " à " + money(r.unitPrice()) + " = " + money(r.total()) + " · par " + r.by());
+        b.button(ViewBuilder.nav("Retour", "company", "id", Long.toString(cid))).button(ViewBuilder.nav("Stock", "stock", "id", Long.toString(cid)));
+        if (can(a, me, Permission.VIEW_ACCOUNTING)) b.button(ViewBuilder.nav("Comptabilité", "acct", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private ViewBuilder vSales(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        Company c = eco.companies.get(a, cid).join();
+        Member me = self(a, cid);
+        ViewBuilder b = vb("sales", "Ventes — " + c.name(), args);
+        List<SalesManager.Sale> list = eco.sales.list(a, cid, null, 30, 0).join();
+        if (list.isEmpty()) b.m("Aucune vente.");
+        for (SalesManager.Sale s : list) {
+            String st = switch (s.status()) { case "PAID" -> "Payée"; case "PENDING" -> "En attente de paiement"; default -> "Annulée"; };
+            List<Btn> btns = new ArrayList<>();
+            btns.add(ViewBuilder.nav("Détail", "sale", "id", Long.toString(cid), "s", Long.toString(s.id())));
+            boolean cancellable = !s.status().equals("CANCELLED") && (s.payment().equals("CASH") ? can(a, me, Permission.MANAGE_FINANCES) : s.status().equals("PENDING") && can(a, me, Permission.CASHIER));
+            if (cancellable) btns.add(ViewBuilder.confirm(b.act("Annuler", "sale.cancel", "s", Long.toString(s.id())), "Annuler cette vente et remettre les articles en stock ?"));
+            b.line(s.number() + " · " + date(s.createdAt()) + " · " + s.customer() + " · " + money(s.total()) + " · " + st + " · " + s.cashier(),
+                    s.status().equals("PAID") ? "g" : s.status().equals("PENDING") ? "n" : "m", btns.toArray(new Btn[0]));
+        }
+        b.button(ViewBuilder.nav("Retour", "company", "id", Long.toString(cid))).button(ViewBuilder.nav("Caisse", "pos", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private ViewBuilder vSale(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        long sid = lng(args, "s");
+        ViewBuilder b = vb("sale", "Détail de la vente", args);
+        SalesManager.Sale sale = eco.sales.list(a, cid, null, 100, 0).join().stream().filter(s -> s.id() == sid).findFirst()
+                .orElseThrow(() -> new EconomyException("NOT_FOUND", "Vente introuvable (trop ancienne pour cet écran)."));
+        b.g(sale.number() + " — " + sale.customer() + " — " + money(sale.total()));
+        b.m(date(sale.createdAt()) + " · caissier : " + sale.cashier() + " · " + (sale.payment().equals("CASH") ? "au comptoir" : "par facture"));
+        for (SalesManager.Line l : eco.sales.lines(a, sid).join()) b.n(l.qty() + " × " + l.name() + " à " + money(l.unitPrice()) + " = " + money(l.total()));
+        if (can(a, self(a, cid), Permission.VIEW_ACCOUNTING)) b.m("Coût : " + money(sale.costTotal()) + " · marge : " + money(sale.margin()));
+        b.button(ViewBuilder.nav("Retour", "sales", "id", Long.toString(cid)));
+        return b;
+    }
+
+    private long[] period(String per) {
+        long now = clock.getAsLong();
+        long start = switch (per == null ? "week" : per) {
+            case "day" -> java.time.LocalDate.ofInstant(Instant.ofEpochMilli(now), zone()).atStartOfDay(zone()).toInstant().toEpochMilli();
+            case "month" -> now - 30 * DAY;
+            case "all" -> 0;
+            default -> now - 7 * DAY;
+        };
+        return new long[]{start, "all".equals(per) ? Long.MAX_VALUE : now + 1};
+    }
+
+    private static String periodFr(String per) {
+        return switch (per == null ? "week" : per) { case "day" -> "aujourd'hui"; case "month" -> "30 derniers jours"; case "all" -> "depuis toujours"; default -> "7 derniers jours"; };
+    }
+
+    private ViewBuilder vAcct(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        Company c = eco.companies.get(a, cid).join();
+        String per = args.getOrDefault("per", "week");
+        long[] range = period(per);
+        AccountingManager.Report r = eco.accounting.report(a, cid, range[0], range[1]).join();
+        ViewBuilder b = vb("acct", "Comptabilité — " + c.name(), args);
+        b.m("Période : " + periodFr(per) + ". Calculée depuis la banque, les ventes et le stock : elle ne peut pas contredire le solde réel.");
+        b.h("Compte de résultat");
+        b.n("Ventes (" + r.salesCount() + ") : " + money(r.salesRevenue()));
+        b.n("Autres factures encaissées : " + money(r.otherRevenue()));
+        b.n("Produits saisis à la main : " + money(r.manualIncome()));
+        b.g("Total des produits : " + money(r.revenue()));
+        b.n("Coût des marchandises vendues : " + money(r.costOfGoods()));
+        b.n("Salaires : " + money(r.salaries()));
+        b.n("Impôts : " + money(r.taxes()));
+        b.n("Factures payées (achats, services) : " + money(r.invoicesPaid()));
+        b.n("Charges saisies à la main : " + money(r.manualExpenses()));
+        b.r("Total des charges : " + money(r.expenses()));
+        b.line("Résultat : " + money(r.result()) + " · marge brute sur les ventes : " + money(r.grossMargin()), r.result() >= 0 ? "g" : "r");
+        b.h("Trésorerie (banque de l'entreprise)");
+        b.n("Solde actuel : " + money(r.bankBalance()));
+        b.n("Entrées : " + money(r.bankIn()) + " · sorties : " + money(r.bankOut()));
+        b.n("Dont rachats de marchandise aux joueurs : " + money(r.buybackTotal()) + " (entrent en stock, ne sont pas une charge)");
+        b.h("Bilan simplifié (à ce jour)");
+        b.n("Actif — banque " + money(r.bankBalance()) + " · stock " + money(r.stockValue()) + " · stock réservé " + money(r.reservedStock()) + " · factures à encaisser " + money(r.receivables()));
+        b.n("Passif — impôts à payer : " + money(r.liabilities()));
+        b.g("Capitaux propres : " + money(r.equity()));
+        b.h("Meilleurs produits");
+        List<AccountingManager.TopProduct> top = eco.accounting.topProducts(a, cid, range[0], range[1], 5).join();
+        if (top.isEmpty()) b.m("Aucune vente sur la période.");
+        for (AccountingManager.TopProduct t : top) b.n(t.name() + " : " + t.qty() + " vendu(s) · " + money(t.revenue()) + " · marge " + money(t.margin()));
+        String ids = Long.toString(cid);
+        b.button(ViewBuilder.nav("Retour", "company", "id", ids)).button(ViewBuilder.nav("Journal", "acct_journal", "id", ids, "per", per))
+                .button(ViewBuilder.nav("Écritures manuelles", "acct_manual", "id", ids)).button(ViewBuilder.nav("Ventes", "sales", "id", ids))
+                .button(ViewBuilder.nav("Rachats et tarifs", "buyback", "id", ids))
+                .button(ViewBuilder.nav("Aujourd'hui", "acct", "id", ids, "per", "day")).button(ViewBuilder.nav("7 jours", "acct", "id", ids, "per", "week"))
+                .button(ViewBuilder.nav("30 jours", "acct", "id", ids, "per", "month")).button(ViewBuilder.nav("Tout", "acct", "id", ids, "per", "all"));
+        return b;
+    }
+
+    private ViewBuilder vAcctJournal(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        String per = args.getOrDefault("per", "week");
+        long[] range = period(per);
+        ViewBuilder b = vb("acct_journal", "Journal — " + periodFr(per), args);
+        List<AccountingManager.JournalEntry> list = eco.accounting.journal(a, cid, range[0], range[1], 100).join();
+        if (list.isEmpty()) b.m("Aucune écriture sur la période.");
+        for (AccountingManager.JournalEntry e : list) b.n(date(e.at()) + " · " + clip(e.label(), 56) + "\n    Débit " + e.debit() + " / Crédit " + e.credit() + " : " + money(e.amount()));
+        b.button(ViewBuilder.nav("Retour", "acct", "id", Long.toString(cid), "per", per));
+        return b;
+    }
+
+    private ViewBuilder vAcctManual(Actor a, Map<String, String> args) {
+        long cid = lng(args, "id");
+        ViewBuilder b = vb("acct_manual", "Écritures manuelles", args);
+        b.m("Pour ce que le jeu ne voit pas (loyer, aide, prime…). Une écriture manuelle n'ajoute ni ne retire d'argent en banque : elle ne sert qu'à la comptabilité.");
+        List<AccountingManager.Manual> list = eco.accounting.manualEntries(a, cid, 30).join();
+        if (list.isEmpty()) b.m("Aucune écriture.");
+        for (AccountingManager.Manual m : list)
+            b.line(date(m.entryAt()) + " · " + (m.kind().equals("INCOME") ? "Produit" : "Charge") + " " + m.category() + " · " + clip(m.label(), 40) + " · " + money(m.amount()) + " · " + m.createdBy(),
+                    m.kind().equals("INCOME") ? "g" : "r", ViewBuilder.confirm(b.act("Supprimer", "acct.manual.del", "i", Long.toString(m.id())), "Supprimer cette écriture ?"));
+        b.field("f_cat", "Catégorie (ex : Loyer, Aide)", "", 24).field("f_label", "Libellé", "", 80).field("f_amount", "Montant (PO)", "", 14);
+        b.button(ViewBuilder.nav("Retour", "acct", "id", Long.toString(cid))).button(b.act("Ajouter un produit", "acct.manual", "kind", "income")).button(b.act("Ajouter une charge", "acct.manual", "kind", "expense"));
+        return b;
+    }
+
+    /** Client d'une vente : vide = comptoir ; @matricule ou @nom = entreprise ; sinon joueur. */
+    private Object[] saleCustomer(String raw) {
+        String t = raw == null ? "" : raw.trim();
+        if (t.isEmpty()) return new Object[]{null, null};
+        if (t.startsWith("@")) { Company co = companyByName(t.substring(1)); return new Object[]{AccountRef.business(co.id()), co.name()}; }
+        PlayerManager.PlayerRef p = invoiceRecipient(t);
+        return new Object[]{AccountRef.personal(p.uuid()), p.name()};
+    }
+
+    private String saleAction(Actor a, String action, Map<String, String> g) {
+        long cid = lng(g, "id");
+        Map<Long, Long> cart = cart(a, cid);
+        switch (action) {
+            case "pos.add" -> {
+                long pr = lng(g, "pr");
+                long q = qty(g.getOrDefault("q", "1"), "Quantité", false);
+                StockManager.Product p = eco.stock.get(a, pr).join();
+                if (p.companyId() != cid || !p.active()) throw new EconomyException("NOT_FOUND", "Produit introuvable.");
+                synchronized (cart) {
+                    long now = cart.getOrDefault(pr, 0L) + q;
+                    if (now > p.stock()) throw new EconomyException("OUT_OF_STOCK", "Stock insuffisant pour « " + p.name() + " » : " + p.stock() + " disponible(s).");
+                    if (cart.size() >= SalesManager.MAX_LINES && !cart.containsKey(pr)) throw new EconomyException("CART_LIMIT", "Trop de lignes dans le panier.");
+                    cart.put(pr, now);
+                }
+                return "";
+            }
+            case "pos.sub" -> { long pr = lng(g, "pr"); synchronized (cart) { long v = cart.getOrDefault(pr, 0L) - 1; if (v <= 0) cart.remove(pr); else cart.put(pr, v); } return ""; }
+            case "pos.del" -> { synchronized (cart) { cart.remove(lng(g, "pr")); } return ""; }
+            case "pos.clear" -> { cart.clear(); return "Panier vidé."; }
+            case "pos.checkout" -> {
+                List<SalesManager.Item> items;
+                synchronized (cart) { items = cart.entrySet().stream().map(e -> new SalesManager.Item(e.getKey(), e.getValue())).toList(); }
+                Object[] cust = saleCustomer(arg(g, "f_customer"));
+                long id = eco.sales.checkout(a, cid, items, (AccountRef) cust[0], (String) cust[1]).join();
+                cart.clear();
+                SalesManager.Sale s = eco.sales.list(a, cid, null, 5, 0).join().stream().filter(x -> x.id() == id).findFirst().orElse(null);
+                return s == null ? "Vente enregistrée." : s.payment().equals("CASH")
+                        ? "Vente " + s.number() + " encaissée : " + money(s.total()) + "."
+                        : "Vente " + s.number() + " : facture de " + money(s.total()) + " envoyée à " + s.customer() + ".";
+            }
+            default -> throw new EconomyException("BAD_ACTION", "Action inconnue.");
+        }
+    }
+
+    private String stockAction(Actor a, String action, Map<String, String> g) {
+        long cid = lng(g, "id");
+        switch (action) {
+            case "stock.create" -> {
+                eco.stock.create(a, cid, arg(g, "f_sku"), arg(g, "f_name"), amountOrZero(arg(g, "f_price")), amountOrZero(arg(g, "f_cost")),
+                        qty(arg(g, "f_qty"), "Quantité", true), qty(arg(g, "f_min"), "Seuil", true), marginBp(arg(g, "f_margin")), amountOrZero(arg(g, "f_buy"))).join();
+                return "Produit créé.";
+            }
+            case "stock.update" -> {
+                eco.stock.update(a, lng(g, "pr"), arg(g, "f_name"), amountOrZero(arg(g, "f_price")), qty(arg(g, "f_min"), "Seuil", true), true,
+                        marginBp(arg(g, "f_margin")), amountOrZero(arg(g, "f_buy"))).join();
+                return "Fiche enregistrée.";
+            }
+            case "stock.toggle" -> {
+                StockManager.Product p = eco.stock.get(a, lng(g, "pr")).join();
+                eco.stock.update(a, p.id(), p.name(), p.price(), p.minStock(), !p.active()).join();
+                return p.active() ? "Produit retiré de la vente." : "Produit remis en vente.";
+            }
+            case "stock.restock" -> {
+                String cost = arg(g, "f_cost");
+                eco.stock.restock(a, lng(g, "pr"), qty(arg(g, "f_qty"), "Quantité", false), cost.isEmpty() ? -1 : amountOrZero(cost), arg(g, "f_note")).join();
+                return "Stock réapprovisionné (coût moyen recalculé).";
+            }
+            case "stock.adjust" -> { eco.stock.adjust(a, lng(g, "pr"), qty(arg(g, "f_qty"), "Quantité", true), arg(g, "f_note")).join(); return "Inventaire enregistré."; }
+            case "stock.loss" -> { eco.stock.loss(a, lng(g, "pr"), qty(arg(g, "f_qty"), "Quantité", false), arg(g, "f_note")).join(); return "Perte enregistrée."; }
+            default -> throw new EconomyException("BAD_ACTION", "Action inconnue.");
+        }
+    }
+
     // ================================================================== actions
 
     private String perform(Actor a, String action, Map<String, String> g) {
         if (action.startsWith("adm.") && !action.startsWith("adm.census.")) requireAdmin(a); // le recensement est controle par le service (employes de la couronne)
         return switch (action) {
             // --- compte personnel
+            case "pos.add", "pos.sub", "pos.del", "pos.clear", "pos.checkout" -> saleAction(a, action, g);
+            case "stock.create", "stock.update", "stock.toggle", "stock.restock", "stock.adjust", "stock.loss" -> stockAction(a, action, g);
+            case "buyback.price" -> {
+                StockManager.Product p = eco.stock.get(a, lng(g, "pr")).join();
+                eco.stock.update(a, p.id(), p.name(), p.price(), p.minStock(), p.active(), p.marginBp(), amountOrZero(arg(g, "f_buy"))).join();
+                yield "Tarif de rachat enregistré.";
+            }
+            case "buyback.pay" -> {
+                PlayerManager.PlayerRef seller = invoiceRecipient(arg(g, "f_seller"));
+                long id = eco.buybacks.buy(a, lng(g, "pr"), seller.uuid(), qty(arg(g, "f_qty"), "Quantité", false)).join();
+                BuybackManager.Buyback r = eco.buybacks.list(a, lng(g, "id"), 5).join().stream().filter(x -> x.id() == id).findFirst().orElse(null);
+                yield r == null ? "Rachat enregistré." : "Facture de rachat " + r.number() + " : " + r.qty() + " × " + r.productName() + ", " + money(r.total()) + " versés à " + r.seller() + ".";
+            }
+            case "sale.cancel" -> { eco.sales.cancel(a, lng(g, "s")).join(); yield "Vente annulée, articles remis en stock."; }
+            case "acct.manual" -> {
+                eco.accounting.addManual(a, lng(g, "id"), arg(g, "kind").equals("income"), arg(g, "f_cat"), arg(g, "f_label"), amount(arg(g, "f_amount"))).join();
+                yield "Écriture ajoutée.";
+            }
+            case "acct.manual.del" -> { eco.accounting.deleteManual(a, lng(g, "i")).join(); yield "Écriture supprimée."; }
             case "bank.deposit" -> cashDeposit(a, g);
             case "bank.withdraw" -> cashWithdraw(a, g);
             case "bank.transfer" -> {

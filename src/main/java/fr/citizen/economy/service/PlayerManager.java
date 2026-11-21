@@ -31,6 +31,12 @@ public final class PlayerManager {
                 rs -> new PlayerRef(UUID.fromString(rs.getString(1)), rs.getString(2)), name == null ? "" : name.trim()));
     }
 
+    /** Tous les joueurs connus, les plus recents d'abord (pour rapprocher les pseudos Discord). */
+    public CompletableFuture<List<PlayerRef>> allPlayers() {
+        return db.read(c -> Sql.query(c, "SELECT uuid, name FROM players ORDER BY last_seen DESC LIMIT 20000",
+                rs -> new PlayerRef(UUID.fromString(rs.getString(1)), rs.getString(2))));
+    }
+
     public CompletableFuture<List<PlayerRow>> list(Actor admin, int limit, int offset) {
         return db.read(c -> {
             PermissionManager.requireAdmin(admin);

@@ -16,6 +16,10 @@ public final class Config {
     public static final ModConfigSpec.ConfigValue<String> WEB_BIND;
     public static final ModConfigSpec.ConfigValue<String> WEB_COUNCIL_PASSWORD;
     public static final ModConfigSpec.ConfigValue<String> WEB_PUBLIC_URL;
+    public static final ModConfigSpec.ConfigValue<String> DISCORD_CLIENT_ID;
+    public static final ModConfigSpec.ConfigValue<String> DISCORD_CLIENT_SECRET;
+    public static final ModConfigSpec.ConfigValue<String> DISCORD_REDIRECT_URI;
+    public static final ModConfigSpec.IntValue DISCORD_SYNC_MINUTES;
 
     static {
         ModConfigSpec.Builder b = new ModConfigSpec.Builder();
@@ -38,6 +42,15 @@ public final class Config {
         WEB_COUNCIL_PASSWORD = b.comment("Mot de passe du Conseil royal (patron de toutes les entreprises). CHANGEZ-LE : la valeur par défaut est connue. Vide = accès Conseil désactivé.")
                 .define("councilPassword", "2007");
         WEB_PUBLIC_URL = b.comment("Adresse affichée aux joueurs par /ceconomy web.").define("publicUrl", "http://mc312.boxtoplay.com:30039");
+        b.pop();
+        b.comment("Discord : connexion au portail avec le compte Discord, et metiers envoyes au bot (necessite Citizen Discord 1.4.0 ou plus)").push("discord");
+        DISCORD_CLIENT_ID = b.comment("Identifiant (Client ID) de l'application Discord, portail développeur -> OAuth2. Vide = connexion Discord désactivée.")
+                .define("clientId", "");
+        DISCORD_CLIENT_SECRET = b.comment("Secret (Client Secret) de la même application. Ne le partagez jamais.").define("clientSecret", "");
+        DISCORD_REDIRECT_URI = b.comment("Adresse de retour, à déclarer à l'identique dans le portail développeur Discord (OAuth2 -> Redirects). Vide = publicUrl + /auth/discord/callback.")
+                .define("redirectUri", "");
+        DISCORD_SYNC_MINUTES = b.comment("Toutes les N minutes, les métiers des joueurs sont envoyés au bot Discord (0 = jamais, sauf /ceconomy discord).")
+                .defineInRange("syncMinutes", 10, 0, 1440);
         b.pop();
         SPEC = b.build();
     }

@@ -46,38 +46,44 @@ public final class InvoiceManager {
     public CompletableFuture<Long> create(Actor actor, long issuerCompanyId, AccountRef recipient, String description, long amount, Long dueAt) {
         return db.write(c -> {
             Authority a = PermissionManager.authorize(c, actor, issuerCompanyId, Permission.ISSUE_INVOICES, true);
-            if (a.member() == null) throw new EconomyException("FORBIDDEN", "Un administrateur n'émet pas de facture au nom d'une entreprise.");
-            if (recipient == null || (recipient.type() != AccountType.PERSONAL && recipient.type() != AccountType.BUSINESS))
-                throw new EconomyException("BAD_TX", "Destinataire invalide.");
-            String d = Validation.text(description, 3, 200, "Description");
-            if (amount <= 0 || amount > Validation.MAX_AMOUNT) throw new EconomyException("BAD_AMOUNT", "Montant invalide.");
-            long now = clock.getAsLong();
-            if (dueAt != null && (dueAt <= now || dueAt > now + 365L * 86_400_000L))
-                throw new EconomyException("BAD_EXPIRY", "Date limite invalide (dans le futur, 1 an maximum).");
-
-            String rType; String rId;
-            if (recipient.type() == AccountType.PERSONAL) {
-                if (!Sql.exists(c, "SELECT 1 FROM players WHERE uuid = ?", recipient.id())) throw new EconomyException("TARGET_UNKNOWN", "Joueur destinataire inconnu.");
-                rType = "PLAYER"; rId = recipient.id();
-            } else {
-                long rc = Long.parseLong(recipient.id());
-                if (rc == issuerCompanyId) throw new EconomyException("BAD_TX", "Une entreprise ne peut pas se facturer elle-même.");
-                if (Records.company(c, rc).status() != CompanyStatus.ACTIVE) throw new EconomyException("COMPANY_NOT_ACTIVE", "L'entreprise destinataire n'est pas active.");
-                rType = "COMPANY"; rId = recipient.id();
-            }
-            if (Sql.scalar(c, "SELECT COUNT(*) FROM invoices WHERE issuer_company_id = ? AND status IN ('PENDING','OVERDUE')", issuerCompanyId) >= MAX_PENDING_PER_ISSUER)
-                throw new EconomyException("INVOICE_LIMIT", "Trop de factures en attente pour cette entreprise.");
-            if (Sql.scalar(c, "SELECT COUNT(*) FROM invoices WHERE issuer_company_id = ? AND recipient_type = ? AND recipient_id = ? AND status IN ('PENDING','OVERDUE')",
-                    issuerCompanyId, rType, rId) >= MAX_PENDING_PER_PAIR)
-                throw new EconomyException("INVOICE_LIMIT", "Trop de factures en attente pour ce destinataire.");
-
-            long id = Sql.insert(c, "INSERT INTO invoices(number,issuer_company_id,recipient_type,recipient_id,description,amount,issued_at,due_at,status,updated_at) "
-                    + "VALUES (?,?,?,?,?,?,?,?, 'PENDING', ?)", UUID.randomUUID().toString(), issuerCompanyId, rType, rId, d, amount, now, dueAt, now);
-            Sql.update(c, "UPDATE invoices SET number = ? WHERE id = ?", String.format("FAC-%06d", id), id);
-            Records.audit(c, actor.id(), "INVOICE_CREATED", "invoice", id, amount + " PO -> " + rType + ":" + rId, now);
-            notifyRecipient(c, rType, rId, "INVOICE_RECEIVED", "Facture " + String.format("FAC-%06d", id) + " de « " + a.company().name() + " » : " + amount + " PO.", now);
-            return id;
+            return createCore(c, actor, issuerCompanyId, recipient, description, amount, dueAt, a);
         });
+    }
+
+    /** Emission d'une facture une fois l'autorisation verifiee par l'appelant (facture manuelle ou vente en caisse). */
+    long createCore(Connection c, Actor actor, long issuerCompanyId, AccountRef recipient, String description, long amount, Long dueAt, Authority a)
+            throws SQLException {
+        if (a.member() == null) throw new EconomyException("FORBIDDEN", "Un administrateur n'émet pas de facture au nom d'une entreprise.");
+        if (recipient == null || (recipient.type() != AccountType.PERSONAL && recipient.type() != AccountType.BUSINESS))
+            throw new EconomyException("BAD_TX", "Destinataire invalide.");
+        String d = Validation.text(description, 3, 200, "Description");
+        if (amount <= 0 || amount > Validation.MAX_AMOUNT) throw new EconomyException("BAD_AMOUNT", "Montant invalide.");
+        long now = clock.getAsLong();
+        if (dueAt != null && (dueAt <= now || dueAt > now + 365L * 86_400_000L))
+            throw new EconomyException("BAD_EXPIRY", "Date limite invalide (dans le futur, 1 an maximum).");
+
+        String rType; String rId;
+        if (recipient.type() == AccountType.PERSONAL) {
+            if (!Sql.exists(c, "SELECT 1 FROM players WHERE uuid = ?", recipient.id())) throw new EconomyException("TARGET_UNKNOWN", "Joueur destinataire inconnu.");
+            rType = "PLAYER"; rId = recipient.id();
+        } else {
+            long rc = Long.parseLong(recipient.id());
+            if (rc == issuerCompanyId) throw new EconomyException("BAD_TX", "Une entreprise ne peut pas se facturer elle-même.");
+            if (Records.company(c, rc).status() != CompanyStatus.ACTIVE) throw new EconomyException("COMPANY_NOT_ACTIVE", "L'entreprise destinataire n'est pas active.");
+            rType = "COMPANY"; rId = recipient.id();
+        }
+        if (Sql.scalar(c, "SELECT COUNT(*) FROM invoices WHERE issuer_company_id = ? AND status IN ('PENDING','OVERDUE')", issuerCompanyId) >= MAX_PENDING_PER_ISSUER)
+            throw new EconomyException("INVOICE_LIMIT", "Trop de factures en attente pour cette entreprise.");
+        if (Sql.scalar(c, "SELECT COUNT(*) FROM invoices WHERE issuer_company_id = ? AND recipient_type = ? AND recipient_id = ? AND status IN ('PENDING','OVERDUE')",
+                issuerCompanyId, rType, rId) >= MAX_PENDING_PER_PAIR)
+            throw new EconomyException("INVOICE_LIMIT", "Trop de factures en attente pour ce destinataire.");
+
+        long id = Sql.insert(c, "INSERT INTO invoices(number,issuer_company_id,recipient_type,recipient_id,description,amount,issued_at,due_at,status,updated_at) "
+                + "VALUES (?,?,?,?,?,?,?,?, 'PENDING', ?)", UUID.randomUUID().toString(), issuerCompanyId, rType, rId, d, amount, now, dueAt, now);
+        Sql.update(c, "UPDATE invoices SET number = ? WHERE id = ?", String.format("FAC-%06d", id), id);
+        Records.audit(c, actor.id(), "INVOICE_CREATED", "invoice", id, amount + " PO -> " + rType + ":" + rId, now);
+        notifyRecipient(c, rType, rId, "INVOICE_RECEIVED", "Facture " + String.format("FAC-%06d", id) + " de « " + a.company().name() + " » : " + amount + " PO.", now);
+        return id;
     }
 
     // ------------------------------------------------------------------ reponse du destinataire
@@ -92,6 +98,7 @@ public final class InvoiceManager {
             long now = clock.getAsLong();
             Sql.update(c, "UPDATE invoices SET status='PAID', paid_tx_id=?, updated_at=? WHERE id=? AND status IN ('PENDING','OVERDUE')", r.id(), now, invoiceId);
             Records.audit(c, actor.id(), "INVOICE_PAID", "invoice", invoiceId, inv.number(), now);
+            SalesManager.onInvoicePaid(c, invoiceId, now);
             notifyIssuer(c, inv.issuerCompanyId(), "INVOICE_PAID", "Facture " + inv.number() + " payée : " + inv.amount() + " PO.", now);
             return r;
         });
@@ -105,9 +112,20 @@ public final class InvoiceManager {
             long now = clock.getAsLong();
             Sql.update(c, "UPDATE invoices SET status='REFUSED', updated_at=? WHERE id=?", now, invoiceId);
             Records.audit(c, actor.id(), "INVOICE_REFUSED", "invoice", invoiceId, inv.number(), now);
+            SalesManager.onInvoiceClosed(c, invoiceId, now, actor.id());
             notifyIssuer(c, inv.issuerCompanyId(), "INVOICE_REFUSED", "Facture " + inv.number() + " refusée par " + inv.recipientName() + ".", now);
             return null;
         });
+    }
+
+    /** Annule une facture deja controlee (vente en caisse annulee) : memes ecritures qu'une annulation manuelle. */
+    void cancelCore(Connection c, Actor actor, long invoiceId) throws SQLException {
+        Invoice inv = get(c, invoiceId);
+        requirePayable(inv);
+        long now = clock.getAsLong();
+        Sql.update(c, "UPDATE invoices SET status='CANCELLED', updated_at=? WHERE id=?", now, invoiceId);
+        Records.audit(c, actor.id(), "INVOICE_CANCELLED", "invoice", invoiceId, inv.number(), now);
+        notifyRecipient(c, inv.recipientType(), inv.recipientId(), "INVOICE_CANCELLED", "Facture " + inv.number() + " annulée par l'émetteur.", now);
     }
 
     public CompletableFuture<Void> cancel(Actor actor, long invoiceId) {
@@ -118,6 +136,7 @@ public final class InvoiceManager {
             long now = clock.getAsLong();
             Sql.update(c, "UPDATE invoices SET status='CANCELLED', updated_at=? WHERE id=?", now, invoiceId);
             Records.audit(c, actor.id(), "INVOICE_CANCELLED", "invoice", invoiceId, inv.number(), now);
+            SalesManager.onInvoiceClosed(c, invoiceId, now, actor.id());
             notifyRecipient(c, inv.recipientType(), inv.recipientId(), "INVOICE_CANCELLED", "Facture " + inv.number() + " annulée par l'émetteur.", now);
             return null;
         });

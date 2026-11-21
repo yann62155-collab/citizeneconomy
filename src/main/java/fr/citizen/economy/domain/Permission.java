@@ -9,7 +9,13 @@ public enum Permission {
     MANAGE_ANNOUNCEMENTS(true),
     PUBLISH_ANNOUNCEMENTS(false),
     VIEW_FINANCES(false),
-    ISSUE_INVOICES(false);
+    ISSUE_INVOICES(false),
+    /** Caisse : encaisser des ventes. */
+    CASHIER(false),
+    /** Stock : creer des produits, reapprovisionner, corriger. */
+    MANAGE_STOCK(false),
+    /** Comptabilite : journal, compte de resultat, bilan, ecritures manuelles. */
+    VIEW_ACCOUNTING(false);
 
     /** Reservee au gerant/proprietaire : ne peut jamais etre accordee a un simple employe. */
     public final boolean managerOnly;

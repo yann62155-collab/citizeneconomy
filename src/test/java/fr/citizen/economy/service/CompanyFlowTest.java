@@ -89,7 +89,8 @@ class CompanyFlowTest {
         // permission reservee impossible a un employe : filtree
         employees.setPermissions(manager, id, worker.id(), PermissionManager.ALL).join();
         Member w = employees.members(owner, id).join().stream().filter(m -> m.player().equals(worker.id())).findFirst().orElseThrow();
-        assertEquals(Permission.PUBLISH_ANNOUNCEMENTS.bit() | Permission.VIEW_FINANCES.bit() | Permission.ISSUE_INVOICES.bit(), w.permissions());
+        assertEquals(Permission.PUBLISH_ANNOUNCEMENTS.bit() | Permission.VIEW_FINANCES.bit() | Permission.ISSUE_INVOICES.bit()
+                | Permission.CASHIER.bit() | Permission.MANAGE_STOCK.bit() | Permission.VIEW_ACCOUNTING.bit(), w.permissions());
         assertEquals(2, employees.salaryHistory(owner, id, worker.id()).join().size());
     }
 

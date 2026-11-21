@@ -32,6 +32,16 @@ public final class Emblems {
         throw new EconomyException("BAD_EMBLEM", "Emblème inconnu. Codes : " + keys() + ".");
     }
 
+    /** Metier (cle de Citizen Metiers) d'un emblème stocké, ou null s'il n'impose aucune restriction (vide, BAN, AUC, inconnu). */
+    public static String jobOf(String stored) {
+        String k = norm(stored);
+        if (k.isEmpty()) return null;
+        for (Emblem e : ALL) {
+            if (norm(e.key()).equals(k) || e.name().equals(k)) return (e.name().equals("banque") || e.name().equals("aucun")) ? null : e.name();
+        }
+        return null;
+    }
+
     public static String label(String key) {
         if (key == null || key.isBlank()) return "Non défini (détecté d'après le secteur)";
         String k = norm(key);

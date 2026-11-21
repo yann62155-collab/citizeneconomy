@@ -95,3 +95,16 @@ L'emblème d'une entreprise est son **métier**. Citizen Métiers s'en sert : le
 | *(vide)* | Citizen Métiers devine d'après le secteur et le nom |
 
 À la création d'une entreprise le joueur saisit l'un de ces codes à 3 lettres (les noms complets sont aussi acceptés et convertis) (ou le laisse vide). **Entreprises déjà créées** : Administration → Entreprises, écrire l'emblème dans le champ du bas puis cliquer sur « Emblème » à côté de l'entreprise (aussi possible depuis le panneau web du Conseil royal). Un patron ne peut pas changer l'emblème de sa propre entreprise. Pour qu'une entreprise n'ait aucune restriction pour ses employés, mettre `AUC` (ou `BAN`).
+
+## Caisse, stock et comptabilité (portail web et en jeu)
+Chaque entreprise a une **Caisse**, un **Stock**, une **Comptabilité** et un écran **Rachat de minerais**.
+- Permissions (à donner aux employés) : *Tenir la caisse*, *Gérer le stock*, *Comptabilité*. Le patron et les gérants les ont toutes. Un employé qui n'a que « annonces » n'a pas accès au portail web.
+- **Article** : prix de vente, coût, stock, seuil d'alerte, prix de rachat (facultatif) et **marge en %** (facultatif). Avec une marge, le prix de vente suit le coût moyen pondéré à chaque réapprovisionnement.
+- **Vente** : sans client = vente au comptoir (encaissée tout de suite en comptabilité, les pièces ne sont pas déposées automatiquement) ; avec un client (pseudo ou @matricule) = facture ; le stock est réservé et rendu si la facture est refusée ou annulée.
+- **Rachat de minerais** : le patron fixe le prix de rachat de chaque article. Un employé avec « Gérer le stock » choisit le vendeur et la quantité : l'entreprise paie le joueur par virement bancaire, le stock augmente au prix de rachat, une facture R-xxxxxx est enregistrée. Ce n'est ni une dépense ni une recette imposable (c'est du stock).
+- **Comptabilité** : calculée depuis les vraies données (banque, ventes, stock, factures, impôts dus), avec journal en partie double et écritures manuelles (qui ne bougent jamais l'argent de la banque).
+
+## Connexion Discord du portail et métiers dans Discord
+1. Portail développeur Discord → votre application → OAuth2 : ajoutez la redirection `<publicUrl>/auth/discord/callback` et recopiez Client ID / Client Secret dans la section `discord` de la config de Citizen Economy (`clientId`, `clientSecret`, `redirectUri` si différent). Sans Client ID, le bouton n'apparaît pas.
+2. Le joueur doit avoir fait `/pseudo` (Citizen Discord) : c'est la seule liaison utilisée. La connexion Discord ne donne jamais l'accès Conseil/admin et exige un droit de travail dans une entreprise.
+3. Métiers → rôles Discord (Citizen Discord 1.4.0+) : désactivé par défaut (`roles_metiers_actif`). Créez les rôles à la main, placez le rôle du bot au-dessus d'eux ; le bot ne crée ni ne supprime de rôle. Seules les entreprises avec un emblème (FOR, MEN, RES, TAV, POT, POI) donnent un métier. Envoi toutes les `syncMinutes` minutes, ou tout de suite avec `/ceconomy discord`.

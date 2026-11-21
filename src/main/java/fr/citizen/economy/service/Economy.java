@@ -21,6 +21,10 @@ public final class Economy {
     public final AdminManager admin;
     public final CensusManager census;
     public final RoyalStaffManager staff;
+    public final StockManager stock;
+    public final SalesManager sales;
+    public final BuybackManager buybacks;
+    public final AccountingManager accounting;
     public final EconomyScheduler scheduler;
 
     public Economy(Database db, Consumer<String> log) {
@@ -39,6 +43,10 @@ public final class Economy {
         admin = new AdminManager(db);
         census = new CensusManager(db);
         staff = new RoyalStaffManager(db);
+        stock = new StockManager(db);
+        sales = new SalesManager(db, invoices);
+        buybacks = new BuybackManager(db);
+        accounting = new AccountingManager(db);
         scheduler = new EconomyScheduler(db, tax, payroll, invoices, notifications, System::currentTimeMillis, log);
     }
 }
