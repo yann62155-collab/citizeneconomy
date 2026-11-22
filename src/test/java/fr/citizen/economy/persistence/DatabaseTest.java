@@ -138,7 +138,7 @@ class DatabaseTest {
                     // retour a l'etat "avant V3"
                     s.executeUpdate("DROP INDEX ux_companies_matricule");
                     s.executeUpdate("ALTER TABLE companies DROP COLUMN matricule");
-                    for (String t : List.of("buybacks", "sale_lines", "sales", "stock_movements", "products", "manual_entries", "royal_staff")) s.executeUpdate("DROP TABLE " + t);
+                    for (String t : List.of("buybacks", "sale_lines", "sales", "stock_movements", "company_chests", "products", "manual_entries", "royal_staff")) s.executeUpdate("DROP TABLE " + t);
                     s.executeUpdate("DROP TABLE census");
                     s.executeUpdate("DELETE FROM schema_version WHERE version >= 3");
                 }

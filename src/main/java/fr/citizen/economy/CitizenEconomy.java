@@ -36,6 +36,10 @@ public class CitizenEconomy {
         NeoForge.EVENT_BUS.addListener(this::onServerStopped);
         NeoForge.EVENT_BUS.addListener(this::onTick);
         NeoForge.EVENT_BUS.addListener(this::onLogin);
+        NeoForge.EVENT_BUS.addListener(fr.citizen.economy.platform.ChestEvents::onUse);
+        NeoForge.EVENT_BUS.addListener(fr.citizen.economy.platform.ChestEvents::onPlace);
+        NeoForge.EVENT_BUS.addListener(fr.citizen.economy.platform.ChestEvents::onBreak);
+        NeoForge.EVENT_BUS.addListener(fr.citizen.economy.platform.ChestEvents::onExplosion);
 
         if (FMLEnvironment.dist == Dist.CLIENT) fr.citizen.economy.client.ClientSetup.init(modBus);
     }

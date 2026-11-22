@@ -108,3 +108,12 @@ Chaque entreprise a une **Caisse**, un **Stock**, une **Comptabilité** et un é
 1. Portail développeur Discord → votre application → OAuth2 : ajoutez la redirection `<publicUrl>/auth/discord/callback` et recopiez Client ID / Client Secret dans la section `discord` de la config de Citizen Economy (`clientId`, `clientSecret`, `redirectUri` si différent). Sans Client ID, le bouton n'apparaît pas.
 2. Le joueur doit avoir fait `/pseudo` (Citizen Discord) : c'est la seule liaison utilisée. La connexion Discord ne donne jamais l'accès Conseil/admin et exige un droit de travail dans une entreprise.
 3. Métiers → rôles Discord (Citizen Discord 1.4.0+) : désactivé par défaut (`roles_metiers_actif`). Créez les rôles à la main, placez le rôle du bot au-dessus d'eux ; le bot ne crée ni ne supprime de rôle. Seules les entreprises avec un emblème (FOR, MEN, RES, TAV, POT, POI) donnent un métier. Envoi toutes les `syncMinutes` minutes, ou tout de suite avec `/ceconomy discord`.
+
+## Coffres d'entreprise
+Un coffre ordinaire marqué au nom d'une entreprise : seuls ses membres (patron, gérants, employés) l'ouvrent. Rien à installer côté joueur (console comprise).
+- **Donner un coffre (admin)** : `/ceconomy chest give <joueur> <entreprise>` (nom ou numéro). Le coffre est nommé « Coffre de <entreprise> » et brille.
+- **Poser** : seuls le patron ou un gérant de cette entreprise peuvent le poser ; il est enregistré à cet instant. Un coffre posé contre lui (grand coffre) en devient une moitié, protégée aussi.
+- **Ouvrir** : tous les membres actifs. Les autres reçoivent un message et le coffre reste fermé. Les admins peuvent toujours l'ouvrir.
+- **Casser** : patron, gérants et admins seulement. Les explosions ne détruisent pas ces coffres. Un entonnoir ne peut pas être posé contre eux par un non-gérant.
+- Un licenciement ou une embauche prend effet en moins de 5 secondes (cache rafraîchi régulièrement).
+- **Limites** : un entonnoir posé par un membre, un piston ou un autre mod peut encore déplacer le contenu. Un coffre cassé laisse un coffre ordinaire (non lié) : redonnez-en un si besoin.

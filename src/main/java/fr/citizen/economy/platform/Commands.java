@@ -23,6 +23,11 @@ public final class Commands {
         root.then(open("admin", "admin", true));
         root.then(net.minecraft.commands.Commands.literal("web").executes(c -> web(c.getSource())));
         root.then(net.minecraft.commands.Commands.literal("discord").requires(Admins::is).executes(c -> discord(c.getSource())));
+        root.then(net.minecraft.commands.Commands.literal("chest").requires(Admins::is).then(net.minecraft.commands.Commands.literal("give")
+                .then(net.minecraft.commands.Commands.argument("joueur", net.minecraft.commands.arguments.EntityArgument.player())
+                        .then(net.minecraft.commands.Commands.argument("entreprise", com.mojang.brigadier.arguments.StringArgumentType.greedyString())
+                                .executes(c -> giveChest(c.getSource(), net.minecraft.commands.arguments.EntityArgument.getPlayer(c, "joueur"),
+                                        com.mojang.brigadier.arguments.StringArgumentType.getString(c, "entreprise")))))));
         root.then(net.minecraft.commands.Commands.literal("help").executes(c -> help(c.getSource())));
         d.register(root);
         // Recensement des citoyens : reserve aux employes de la couronne (et aux admins)
@@ -109,6 +114,27 @@ public final class Commands {
         return 1;
     }
 
+    private static int giveChest(CommandSourceStack src, ServerPlayer target, String company) {
+        EconomyRuntime rt = EconomyRuntime.current();
+        if (rt == null) { src.sendFailure(Component.literal("L'économie n'est pas disponible.")); return 0; }
+        rt.executor().execute(() -> {
+            fr.citizen.economy.service.ChestManager.CompanyRef ref;
+            try { ref = rt.economy().chests.resolveActive(company).join(); }
+            catch (RuntimeException e) {
+                String m = e.getCause() != null ? e.getCause().getMessage() : e.getMessage();
+                src.getServer().execute(() -> src.sendFailure(Component.literal(m)));
+                return;
+            }
+            src.getServer().execute(() -> {
+                net.minecraft.world.item.ItemStack stack = ChestEvents.item(ref.id(), ref.name());
+                if (!target.getInventory().add(stack)) target.drop(stack, false);
+                src.sendSuccess(() -> Component.literal("Coffre de « " + ref.name() + " » donné à " + target.getGameProfile().getName() + ".").withStyle(ChatFormatting.GREEN), true);
+                target.sendSystemMessage(Component.literal("Vous avez reçu un coffre d'entreprise (" + ref.name() + "). Posez-le : seuls les membres de l'entreprise pourront l'ouvrir."));
+            });
+        });
+        return 1;
+    }
+
     private static int help(CommandSourceStack src) {
         String[] lines = {
                 "/ceconomy : menu principal (touche K)",
@@ -120,6 +146,7 @@ public final class Commands {
                 "/ceconomy web : code de connexion au panneau web (patrons, gérants, employés avec droits)",
                 "/ceconomy treasury : trésorerie royale (admin)",
                 "/ceconomy discord : envoyer maintenant les métiers au bot Discord (admin)",
+                "/ceconomy chest give <joueur> <entreprise> : donne un coffre d'entreprise (admin)",
                 "/ceconomy admin : administration (admin)",
         };
         for (String l : lines) src.sendSuccess(() -> Component.literal(l).withStyle(ChatFormatting.GOLD), false);

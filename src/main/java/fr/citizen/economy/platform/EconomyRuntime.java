@@ -49,6 +49,10 @@ public final class EconomyRuntime {
     }
 
     private final DiscordLinks discord;
+    private final fr.citizen.economy.service.ChestLocks locks = new fr.citizen.economy.service.ChestLocks();
+    private volatile boolean chestBusy;
+
+    public fr.citizen.economy.service.ChestLocks locks() { return locks; }
     private volatile boolean discordBusy;
 
     public DiscordLinks discord() { return discord; }
@@ -100,6 +104,10 @@ public final class EconomyRuntime {
             throw new IllegalStateException("Citizen Economy : initialisation SQLite impossible", e);
         }
         current = new EconomyRuntime(server, db);
+        try {
+            current.locks.loadChests(current.economy.chests.all().join());
+            current.locks.loadMembers(current.economy.chests.snapshot().join());
+        } catch (Throwable t) { CitizenEconomy.LOGGER.error("Chargement des coffres d'entreprise", t); }
         CitizenEconomy.LOGGER.info("Citizen Economy : base SQLite prête ({})", dir);
         try {
             current.web.start();
@@ -140,6 +148,14 @@ public final class EconomyRuntime {
                 try { String m = syncDiscordNow(); if (!m.startsWith("Les rôles") && !m.startsWith("Le bot") && !m.startsWith("Citizen Discord")) CitizenEconomy.LOGGER.info(m); }
                 catch (Throwable t) { CitizenEconomy.LOGGER.warn("Envoi des métiers à Discord : {}", t.toString()); }
                 finally { discordBusy = false; }
+            });
+        }
+        if (ticks % 100 == 70 && !chestBusy) { // membres des entreprises : toutes les 5 secondes
+            chestBusy = true;
+            executor.execute(() -> {
+                try { locks.loadMembers(economy.chests.snapshot().join()); }
+                catch (Throwable t) { CitizenEconomy.LOGGER.error("Membres des coffres d'entreprise", t); }
+                finally { chestBusy = false; }
             });
         }
         if ((ticks == 20 || ticks % 100 == 50) && !censusBusy) { // recensement : toutes les 5 secondes

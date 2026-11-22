@@ -25,6 +25,7 @@ public final class Economy {
     public final SalesManager sales;
     public final BuybackManager buybacks;
     public final AccountingManager accounting;
+    public final ChestManager chests;
     public final EconomyScheduler scheduler;
 
     public Economy(Database db, Consumer<String> log) {
@@ -47,6 +48,7 @@ public final class Economy {
         sales = new SalesManager(db, invoices);
         buybacks = new BuybackManager(db);
         accounting = new AccountingManager(db);
+        chests = new ChestManager(db);
         scheduler = new EconomyScheduler(db, tax, payroll, invoices, notifications, System::currentTimeMillis, log);
     }
 }
